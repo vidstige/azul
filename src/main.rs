@@ -3,7 +3,7 @@ use std::{iter, ops::{Index, IndexMut}};
 use rand::{distributions::WeightedIndex, prelude::Distribution, thread_rng, Rng};
 
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Tile {
     BLACK,
     WHITE,
@@ -11,6 +11,7 @@ enum Tile {
     YELLOW,
     RED,
 }
+const TILES: [Tile; 5] = [Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED];
 
 impl TryFrom<usize> for Tile {
     type Error = ();
@@ -27,7 +28,7 @@ impl TryFrom<usize> for Tile {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct TileSet {
     black: usize,
     white: usize,
@@ -125,6 +126,19 @@ impl Player {
     fn new() -> Self {
         Self { rows: Default::default(), points: 0, wall: Default::default() }
     }
+    
+    fn can_place(&self, tile: Tile, count: usize, index: usize) -> bool {
+        let size = index + 1;
+        if let Some((existing_tile, existing_count)) = self.rows[index] {
+            tile == existing_tile && count <= (size - existing_count) 
+        } else {
+            count <= size
+        }
+    }
+    
+    fn place(&mut self, tile: Tile, count: usize, row: usize) {
+        self.rows[row] = Some((tile, count))
+    }
 }
 
 #[derive(Clone)]
@@ -133,6 +147,7 @@ struct State {
     factories: Vec<TileSet>,
     center: TileSet,
     players: Vec<Player>,
+    moves: usize,
 }
 
 impl State {
@@ -145,15 +160,20 @@ impl State {
             iter::repeat(Tile::RED).take(20),
         ].into_iter().flat_map(|it| it).collect();
         let players = iter::repeat(Player::new()).take(players).collect();
-        Self { bag, factories: Vec::new(), center: TileSet::new(), players }
+        Self { bag, factories: Vec::new(), center: TileSet::new(), players, moves: 0 }
     }
     fn deal<R: Rng>(&mut self, rng: &mut R) {
         // deal factories
         for _ in 0..5 {
             // TODO: What if the bag is empty?
             let tiles = self.bag.draw(rng, 4);
+            println!("{:?}", tiles);
             self.factories.push(tiles);
         }
+    }
+    
+    fn current_player(&self) -> usize {
+        self.moves % self.players.len()
     }
 }
 
@@ -164,14 +184,33 @@ trait GameState: Sized {
 
 impl GameState for State {
     fn children(&self) -> Vec<Self> {
-        let mut children = Vec::new();        
+        let mut children = Vec::new();
+        let player_index = self.current_player();
         // take the tiles from one of the factories...
-        for index in 0..self.factories.len() {
+        for factory_index in 0..self.factories.len() {
             let mut state = self.clone();
-            let factory = state.factories.remove(index);
+            println!("Taking factory #{}", factory_index);
+            let factory = state.factories.remove(factory_index);
             // ...and select one color
-            state.center.extend(factory);
-            children.push(state);
+            for tile in TILES {
+                // take tile and leave rest in center
+                let mut state = state.clone();
+                let mut factory = factory.clone();
+                let count = factory.drain(tile);
+                if count > 0 {
+                    println!("  Taking {:?}", tile);
+                    state.center.extend(factory);
+                    // ...put the "count" number of "tile" on one row
+                    for row in 0..5 {
+                        if state.players[player_index].can_place(tile, count, row) {
+                            println!("    Placing {} on row {}", count, row);
+                            let mut state = state.clone();
+                            state.players[player_index].place(tile, count, row);
+                            children.push(state);
+                        }
+                    }
+                }
+            }
         }
         children
     }
@@ -185,7 +224,6 @@ fn main() {
     let mut rng = thread_rng();
     let mut state = State::new(2);
     state.deal(&mut rng);
-    for state in state.children() {
-        println!("{}", state.bag.len())
-    }
+
+    println!("{}", state.children().len());
 }
