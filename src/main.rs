@@ -167,7 +167,6 @@ impl State {
         for _ in 0..5 {
             // TODO: What if the bag is empty?
             let tiles = self.bag.draw(rng, 4);
-            println!("{:?}", tiles);
             self.factories.push(tiles);
         }
     }
@@ -212,13 +211,30 @@ impl GameState for State {
                 }
             }
         }
+        // Or take all tiles of one type from the center
+        for tile in TILES {
+            // take tile from center
+            let mut state = self.clone();
+            let count = state.center.drain(tile);
+            if count > 0 {
+                println!("  Taking {:?} from center", tile);
+                // ...put the "count" number of "tile" on one row
+                for row in 0..5 {
+                    if state.players[player_index].can_place(tile, count, row) {
+                        println!("    Placing {} on row {}", count, row);
+                        let mut state = state.clone();
+                        state.players[player_index].place(tile, count, row);
+                        children.push(state);
+                    }
+                }
+            }
+        }
         children
     }
     fn winner(&self) -> Option<usize> {
         None
     }
 }
-
 
 fn main() {
     let mut rng = thread_rng();
