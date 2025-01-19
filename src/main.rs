@@ -1,6 +1,6 @@
 use std::{iter, ops::{Index, IndexMut}};
 
-use rand::{distributions::WeightedIndex, prelude::Distribution, thread_rng, Rng};
+use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom, thread_rng, Rng};
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,10 +98,6 @@ impl TileSet {
         }
         tileset
     }
-    
-    fn len(&self) -> usize {
-        self.black + self.white + self.azul + self.yellow + self.red
-    }
 
     fn push(&mut self, tile: Tile) {
         self[tile] += 1;
@@ -121,23 +117,31 @@ struct Player {
     rows: [Option<(Tile, usize)>; 5],
     points: usize,
     wall: [[Option<Tile>; 5]; 5],
+    discard: TileSet,
 }
 impl Player {
     fn new() -> Self {
-        Self { rows: Default::default(), points: 0, wall: Default::default() }
-    }
-    
-    fn can_place(&self, tile: Tile, count: usize, index: usize) -> bool {
-        let size = index + 1;
-        if let Some((existing_tile, existing_count)) = self.rows[index] {
-            tile == existing_tile && count <= (size - existing_count) 
-        } else {
-            count <= size
+        Self {
+            rows: Default::default(),
+            points: 0,
+            wall: Default::default(),
+            discard: TileSet::new(),
         }
     }
-    
-    fn place(&mut self, tile: Tile, count: usize, row: usize) {
-        self.rows[row] = Some((tile, count))
+
+    fn place(&mut self, tile: Tile, count: usize, row_index: usize) -> usize {
+        let row_size = row_index + 1;
+        let free = if let Some((existing_tile, existing_count)) = self.rows[row_index] {
+            if existing_tile == tile {
+                row_size - existing_count
+            } else {
+                0
+            }
+        } else {
+            row_size
+        };
+        self.rows[row_index] = Some((tile, free));
+        count.saturating_sub(free)
     }
 }
 
@@ -170,9 +174,32 @@ impl State {
             self.factories.push(tiles);
         }
     }
-    
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
+    }
+    fn is_game_over(&self) -> bool {
+        // game is over if any player has any row with all cells filled
+        self.players.iter().any(|player| player.wall.iter().any(|row| row.iter().all(|cell| cell.is_some())))
+    }
+    fn place_all(&self, tile: Tile, count: usize) -> Vec<State> {
+        // Put the "count" number of "tile" on one row. Return a state for each
+        // such placement. Furthermore the tiles cannot be placed anyway, place them in the
+        // discard
+        let player_index = self.current_player();
+        let states: Vec<_> = (0..5).map(|row| {
+            let mut state = self.clone();
+            let discard_count = state.players[player_index].place(tile, count, row);
+            state.players[player_index].discard[tile] += discard_count;
+            state
+        }).collect();
+        if states.is_empty() {
+            // player must discard all tiles :-(
+            let mut state = self.clone();
+            state.players[player_index].discard[tile] += count;
+            vec![state]
+        } else {
+            states
+        }
     }
 }
 
@@ -184,7 +211,6 @@ trait GameState: Sized {
 impl GameState for State {
     fn children(&self) -> Vec<Self> {
         let mut children = Vec::new();
-        let player_index = self.current_player();
         // take the tiles from one of the factories...
         for factory_index in 0..self.factories.len() {
             let mut state = self.clone();
@@ -199,15 +225,7 @@ impl GameState for State {
                 if count > 0 {
                     println!("  Taking {:?}", tile);
                     state.center.extend(factory);
-                    // ...put the "count" number of "tile" on one row
-                    for row in 0..5 {
-                        if state.players[player_index].can_place(tile, count, row) {
-                            println!("    Placing {} on row {}", count, row);
-                            let mut state = state.clone();
-                            state.players[player_index].place(tile, count, row);
-                            children.push(state);
-                        }
-                    }
+                    children.extend(state.place_all(tile, count));
                 }
             }
         }
@@ -218,28 +236,26 @@ impl GameState for State {
             let count = state.center.drain(tile);
             if count > 0 {
                 println!("  Taking {:?} from center", tile);
-                // ...put the "count" number of "tile" on one row
-                for row in 0..5 {
-                    if state.players[player_index].can_place(tile, count, row) {
-                        println!("    Placing {} on row {}", count, row);
-                        let mut state = state.clone();
-                        state.players[player_index].place(tile, count, row);
-                        children.push(state);
-                    }
-                }
+                children.extend(state.place_all(tile, count));
             }
         }
         children
     }
     fn winner(&self) -> Option<usize> {
-        None
+        if self.is_game_over() {
+            self.players.iter().map(|player| player.points).max()
+        } else {
+            None
+        }
     }
 }
 
 fn main() {
-    let mut rng = thread_rng();
+    let rng = &mut thread_rng();
     let mut state = State::new(2);
-    state.deal(&mut rng);
-
-    println!("{}", state.children().len());
+    state.deal(rng);
+    while state.winner().is_none() {
+        let children = state.children();
+        state = children.choose(rng).unwrap().clone();
+    }
 }
