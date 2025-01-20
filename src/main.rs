@@ -263,9 +263,15 @@ impl<R> State<R> where R: Rng + Clone {
         ].iter().sum()
     }
     fn deal(&mut self) {
+        let n = 5; // TODO: Compute based on number of players
+        if self.bag.len() < 4 * n {
+            // move tiles from tray to bag
+            let mut tmp = TileSet::new();
+            mem::swap(&mut tmp, &mut self.tray);
+            self.bag.extend(tmp);
+        }
         // deal factories
-        for _ in 0..5 {
-            // TODO: What if the bag is empty?
+        for _ in 0..n {
             let tiles = self.bag.draw(&mut self.rng, 4);
             self.factories.push(tiles);
         }
@@ -284,6 +290,7 @@ impl<R> State<R> where R: Rng + Clone {
             player.prepare_next_round(&mut self.tray);
         }
         // 2. Deal new factories
+        self.deal();
     }
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
