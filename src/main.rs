@@ -223,7 +223,8 @@ impl Player {
 }
 
 #[derive(Clone)]
-struct State {
+struct State<R: Rng + Clone> {
+    rng: R,
     bag: TileSet,
     factories: Vec<TileSet>,
     center: TileSet,
@@ -232,8 +233,8 @@ struct State {
     moves: usize,
 }
 
-impl State {
-    fn new(players: usize) -> State {
+impl<R> State<R> where R: Rng + Clone {
+    fn new(players: usize, rng: R) -> Self {
         let bag = [
             iter::repeat(Tile::BLACK).take(20),
             iter::repeat(Tile::WHITE).take(20),
@@ -243,6 +244,7 @@ impl State {
         ].into_iter().flat_map(|it| it).collect();
         let players = iter::repeat(Player::new()).take(players).collect();
         Self {
+            rng,
             bag,
             factories: Vec::new(),
             center: TileSet::new(),
@@ -260,11 +262,11 @@ impl State {
             self.players.iter().map(|p| p.tile_count()).sum(),
         ].iter().sum()
     }
-    fn deal<R: Rng>(&mut self, rng: &mut R) {
+    fn deal(&mut self) {
         // deal factories
         for _ in 0..5 {
             // TODO: What if the bag is empty?
-            let tiles = self.bag.draw(rng, 4);
+            let tiles = self.bag.draw(&mut self.rng, 4);
             self.factories.push(tiles);
         }
     }
@@ -290,7 +292,7 @@ impl State {
         // game is over if any player has any row with all cells filled
         self.players.iter().any(|player| player.wall.rows.iter().any(|row| row.iter().all(|cell| *cell)))
     }
-    fn place_all(&self, tile: Tile, count: usize) -> Vec<State> {
+    fn place_all(&self, tile: Tile, count: usize) -> Vec<Self> {
         // Put the "count" number of "tile" on one row. Return a state for each
         // such placement. Furthermore the tiles cannot be placed anywhere, place
         // them in the discard
@@ -325,12 +327,12 @@ impl State {
     }
 }
 
-trait GameState: Sized {
+trait GameState<R>: Sized {
     fn children(&self) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
 }
 
-impl GameState for State {
+impl<R> GameState<R> for State<R> where R: Rng + Clone {
     fn children(&self) -> Vec<Self> {
         let mut children = Vec::new();
         // take the tiles from one of the factories...
@@ -374,8 +376,8 @@ impl GameState for State {
 
 fn main() {
     let rng = &mut thread_rng();
-    let mut state = State::new(2);
-    state.deal(rng);
+    let mut state = State::new(2, thread_rng());
+    state.deal();
     while state.winner().is_none() {
         let children = state.children();
         state = children.choose(rng).unwrap().clone();
