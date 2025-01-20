@@ -157,37 +157,47 @@ impl Player {
         }
     }
 
-    fn maybe_place(&mut self, tile: Tile, count: usize, row_index: usize) -> Option<usize> {
+    fn maybe_place(&mut self, tile: Tile, count: usize, row_index: usize) -> bool {
         let row_size = row_index + 1;
-        let mut free = row_size;
-        if let Some((existing_tile, existing_count)) = self.rows[row_index] {
-            if existing_tile != tile || self.wall.has_tile(row_index, &tile) {
-                return None;
+        if let Some((current_tile, ref mut current_count)) = self.rows[row_index] {
+            if current_tile != tile || self.wall.has_tile(row_index, &tile) {
+                // another tile is used - we can't place here at all
+                return false
             }
-            free = row_size - existing_count;
-            println!("      was={} placing={} free={}, size={}", existing_count, count, free, row_size);
+            // some spaces used. return how many are left
+            let space_left = row_size - *current_count;
+            // we got space left - add what we can, discard rest
+            let discard_count = count.saturating_sub(space_left);
+            *current_count += count - discard_count;
+            self.discard[tile] += discard_count;
+        } else {
+            // unoccupied row - we can use the entire row
+            let space_left = row_size;
+            // we got space left - add what we can, discard rest
+            let discard_count = count.saturating_sub(space_left);
+            self.rows[row_index] = Some((tile, count - discard_count));
+            self.discard[tile] += discard_count;
         }
-        self.rows[row_index] = Some((tile, free.min(count)));
-        Some(count.saturating_sub(free))
+        true
     }
     
     // TODO: rename this function
     fn finish_up(&mut self, tray: &mut TileSet) {
         for (row_index, row) in self.rows.iter_mut().enumerate() {
-            let row_size = row_index + 1;
+            /*let row_size = row_index + 1;
             if let Some((tile, count)) = row.clone() {
                 if count == row_size {
                     //self.wall[] // add tile to wall
                     tray[tile] += count - 1; // add rest back to tray
                     *row = None;  // clear row
                 }
-            }
+            }*/
         }
     }
-    
+
     fn tile_count(&self) -> usize {
         [
-            self.rows.iter().flat_map(|r| r).map(|(_, count)| count).sum::<usize>(),
+            self.rows.iter().flat_map(|r| r).map(|(_, count)| count).sum(),
             self.wall.len(),
             self.discard.len(),
         ].iter().sum()
@@ -270,26 +280,28 @@ impl State {
         let states: Vec<_> = (0..5).flat_map(|row| {
             println!("    placing in row {}", row);
             let mut state = self.clone();
-            if let Some(discard_count) = state.players[player_index].maybe_place(tile, count, row) {
-                state.players[player_index].discard[tile] += discard_count;
-                if state.tile_count() != 100 {
-                    println!("bad tile count {} after discarding {}", state.tile_count(), discard_count);
-                }    
-                Some(state)
-            } else {
-                None
+            let tmp = state.players[player_index].maybe_place(tile, count, row).then_some(state);
+            if let Some(s) = &tmp {
+                s.self_check();
             }
+            tmp
         }).collect();
         if states.is_empty() {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
-            if state.tile_count() != 100 {
-                println!("bad tile count {}", state.tile_count());
-            }    
+            state.self_check();
             vec![state]
         } else {
             states
+        }
+    }
+    
+    fn self_check(&self) {
+        let n = self.tile_count();
+        if n != 100 {
+            println!("bad tile count {}", n);
+            panic!();
         }
     }
 }
