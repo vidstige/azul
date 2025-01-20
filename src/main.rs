@@ -280,17 +280,12 @@ impl State {
         let states: Vec<_> = (0..5).flat_map(|row| {
             println!("    placing in row {}", row);
             let mut state = self.clone();
-            let tmp = state.players[player_index].maybe_place(tile, count, row).then_some(state);
-            if let Some(s) = &tmp {
-                s.self_check();
-            }
-            tmp
+            state.players[player_index].maybe_place(tile, count, row).then_some(state)
         }).collect();
         if states.is_empty() {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
-            state.self_check();
             vec![state]
         } else {
             states
