@@ -147,8 +147,8 @@ impl Wall {
 }
 
 fn discard_points(count: usize) -> usize {
-    const SLOTS: [usize; 7] = [1, 1, 2, 2, 2, 3, 3];
-    (0..count).map(|i| if i < 7 { SLOTS[i] } else { 3 }).sum()
+    const SLOTS: [usize; 5] = [1, 1, 2, 2, 2];
+    (0..count).map(|i| if i < SLOTS.len() { SLOTS[i] } else { 3 }).sum()
 }
 
 #[derive(Clone)]
