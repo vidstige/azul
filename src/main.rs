@@ -192,8 +192,7 @@ impl Player {
         true
     }
     
-    // TODO: rename this function
-    fn finish_up(&mut self, tray: &mut TileSet) {
+    fn prepare_next_round(&mut self, tray: &mut TileSet) {
         // start by going through rows and award points for filled rows
         for (row_index, row) in self.rows.iter_mut().enumerate() {
             let row_size = row_index + 1;
@@ -273,14 +272,14 @@ impl State {
         self.factories.iter().map(|factory| factory.len()).sum::<usize>() + self.center.len() == 0
     }
     // clean up by updating score, dealing new tiles, etc
-    fn finish_up(&mut self) {
+    fn prepare_next_round(&mut self) {
         // are the more tiles?
         if !self.is_empty() {
             return;
         }
         // 1. Score and move tiles to tray/wall
         for player in &mut self.players {
-            player.finish_up(&mut self.tray);
+            player.prepare_next_round(&mut self.tray);
         }
         // 2. Deal new factories
     }
@@ -300,7 +299,7 @@ impl State {
             println!("    placing in row {}", row);
             let mut state = self.clone();
             if state.players[player_index].maybe_place(tile, count, row) {
-                state.finish_up();
+                state.prepare_next_round();
                 Some(state)
             } else {
                 None
@@ -310,7 +309,7 @@ impl State {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
-            state.finish_up();
+            state.prepare_next_round();
             vec![state]
         } else {
             states
