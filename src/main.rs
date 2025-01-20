@@ -317,10 +317,10 @@ impl GameState for State {
             // ...and select one color
             for tile in TILES {
                 // take tile and leave rest in center
-                let mut state = state.clone();
                 let mut factory = factory.clone();
                 let count = factory.drain(tile);
                 if count > 0 {
+                    let mut state = state.clone();
                     println!("  Taking {} of {:?}", count, tile);
                     state.center.extend(factory);
                     children.extend(state.place_all(tile, count));
