@@ -110,13 +110,41 @@ impl TileSet {
         self.yellow += tileset.yellow;
         self.red += tileset.red;
     }
+    
+    fn len(&self) -> usize {
+        self.black + self.white + self.azul + self.yellow + self.red
+    }
+}
+
+#[derive(Clone)]
+struct Wall {
+    rows: [[bool; 5]; 5],
+}
+const WALL: [[Tile; 5]; 5] = [
+    [Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK, Tile::WHITE],
+    [Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK],
+    [Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED],
+    [Tile::RED, Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW],
+    [Tile::YELLOW, Tile::RED, Tile::BLACK, Tile::WHITE, Tile::AZUL],
+];
+impl Wall {
+    fn new() -> Self {
+        Wall { rows: Default::default() }
+    }
+    fn len(&self) -> usize {
+        self.rows.as_flattened().iter().filter(|p| **p).count()
+    }
+    fn has_tile(&self, row_index: usize, tile: &Tile) -> bool {
+        let colum_index = WALL[row_index].iter().position(|cell| cell == tile).unwrap();
+        self.rows[row_index][colum_index]
+    }    
 }
 
 #[derive(Clone)]
 struct Player {
     rows: [Option<(Tile, usize)>; 5],
     points: usize,
-    wall: [[Option<Tile>; 5]; 5],
+    wall: Wall,
     discard: TileSet,
 }
 impl Player {
@@ -124,24 +152,45 @@ impl Player {
         Self {
             rows: Default::default(),
             points: 0,
-            wall: Default::default(),
+            wall: Wall::new(),
             discard: TileSet::new(),
         }
     }
 
-    fn place(&mut self, tile: Tile, count: usize, row_index: usize) -> usize {
+    fn maybe_place(&mut self, tile: Tile, count: usize, row_index: usize) -> Option<usize> {
         let row_size = row_index + 1;
-        let free = if let Some((existing_tile, existing_count)) = self.rows[row_index] {
-            if existing_tile == tile {
-                row_size - existing_count
-            } else {
-                0
+        let mut free = row_size;
+        if let Some((existing_tile, existing_count)) = self.rows[row_index] {
+            if existing_tile != tile || self.wall.has_tile(row_index, &tile) {
+                return None;
             }
-        } else {
-            row_size
-        };
-        self.rows[row_index] = Some((tile, free));
-        count.saturating_sub(free)
+            free = row_size - existing_count;
+            println!("      was={} placing={} free={}, size={}", existing_count, count, free, row_size);
+        }
+        self.rows[row_index] = Some((tile, free.min(count)));
+        Some(count.saturating_sub(free))
+    }
+    
+    // TODO: rename this function
+    fn finish_up(&mut self, tray: &mut TileSet) {
+        for (row_index, row) in self.rows.iter_mut().enumerate() {
+            let row_size = row_index + 1;
+            if let Some((tile, count)) = row.clone() {
+                if count == row_size {
+                    //self.wall[] // add tile to wall
+                    tray[tile] += count - 1; // add rest back to tray
+                    *row = None;  // clear row
+                }
+            }
+        }
+    }
+    
+    fn tile_count(&self) -> usize {
+        [
+            self.rows.iter().flat_map(|r| r).map(|(_, count)| count).sum::<usize>(),
+            self.wall.len(),
+            self.discard.len(),
+        ].iter().sum()
     }
 }
 
@@ -150,6 +199,7 @@ struct State {
     bag: TileSet,
     factories: Vec<TileSet>,
     center: TileSet,
+    tray: TileSet,
     players: Vec<Player>,
     moves: usize,
 }
@@ -164,7 +214,23 @@ impl State {
             iter::repeat(Tile::RED).take(20),
         ].into_iter().flat_map(|it| it).collect();
         let players = iter::repeat(Player::new()).take(players).collect();
-        Self { bag, factories: Vec::new(), center: TileSet::new(), players, moves: 0 }
+        Self {
+            bag,
+            factories: Vec::new(),
+            center: TileSet::new(),
+            tray: TileSet::new(),
+            players,
+            moves: 0,
+        }
+    }
+    fn tile_count(&self) -> usize {
+        [
+            self.bag.len(),
+            self.factories.iter().map(|f| f.len()).sum(),
+            self.center.len(),
+            self.tray.len(),
+            self.players.iter().map(|p| p.tile_count()).sum(),
+        ].iter().sum()
     }
     fn deal<R: Rng>(&mut self, rng: &mut R) {
         // deal factories
@@ -174,28 +240,53 @@ impl State {
             self.factories.push(tiles);
         }
     }
+    fn is_empty(&self) -> bool {
+        self.factories.iter().map(|factory| factory.len()).sum::<usize>() + self.center.len() == 0
+    }
+    // clean up by updating score, dealing new tiles, etc
+    fn finish_up(&mut self) {
+        // are the more tiles?
+        if !self.is_empty() {
+            return;
+        }
+        // 1. Score and move tiles to tray/wall
+        for player in &mut self.players {
+            player.finish_up(&mut self.tray);
+        }
+        // 2. Deal new factories
+    }
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
     fn is_game_over(&self) -> bool {
         // game is over if any player has any row with all cells filled
-        self.players.iter().any(|player| player.wall.iter().any(|row| row.iter().all(|cell| cell.is_some())))
+        self.players.iter().any(|player| player.wall.rows.iter().any(|row| row.iter().all(|cell| *cell)))
     }
     fn place_all(&self, tile: Tile, count: usize) -> Vec<State> {
         // Put the "count" number of "tile" on one row. Return a state for each
-        // such placement. Furthermore the tiles cannot be placed anyway, place them in the
-        // discard
+        // such placement. Furthermore the tiles cannot be placed anywhere, place
+        // them in the discard
         let player_index = self.current_player();
-        let states: Vec<_> = (0..5).map(|row| {
+        let states: Vec<_> = (0..5).flat_map(|row| {
+            println!("    placing in row {}", row);
             let mut state = self.clone();
-            let discard_count = state.players[player_index].place(tile, count, row);
-            state.players[player_index].discard[tile] += discard_count;
-            state
+            if let Some(discard_count) = state.players[player_index].maybe_place(tile, count, row) {
+                state.players[player_index].discard[tile] += discard_count;
+                if state.tile_count() != 100 {
+                    println!("bad tile count {} after discarding {}", state.tile_count(), discard_count);
+                }    
+                Some(state)
+            } else {
+                None
+            }
         }).collect();
         if states.is_empty() {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
+            if state.tile_count() != 100 {
+                println!("bad tile count {}", state.tile_count());
+            }    
             vec![state]
         } else {
             states
@@ -223,7 +314,7 @@ impl GameState for State {
                 let mut factory = factory.clone();
                 let count = factory.drain(tile);
                 if count > 0 {
-                    println!("  Taking {:?}", tile);
+                    println!("  Taking {} of {:?}", count, tile);
                     state.center.extend(factory);
                     children.extend(state.place_all(tile, count));
                 }
