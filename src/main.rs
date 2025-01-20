@@ -140,7 +140,7 @@ impl Wall {
     }
     fn add_tile(&mut self, row_index: usize, tile: Tile) -> usize {
         let colum_index = WALL[row_index].iter().position(|cell| cell == &tile).unwrap();
-        assert!(!self.rows[row_index][colum_index], "Tile was alrady assigned!");
+        assert!(!self.rows[row_index][colum_index], "Tile was already assigned!");
         self.rows[row_index][colum_index] = true;
         0  // TODO: Compute points when adding tile
     }    
