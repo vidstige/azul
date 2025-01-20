@@ -1,4 +1,4 @@
-use std::{iter, ops::{Index, IndexMut}};
+use std::{iter, mem, ops::{Index, IndexMut}};
 
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom, thread_rng, Rng};
 
@@ -137,7 +137,18 @@ impl Wall {
     fn has_tile(&self, row_index: usize, tile: &Tile) -> bool {
         let colum_index = WALL[row_index].iter().position(|cell| cell == tile).unwrap();
         self.rows[row_index][colum_index]
+    }
+    fn add_tile(&mut self, row_index: usize, tile: Tile) -> usize {
+        let colum_index = WALL[row_index].iter().position(|cell| cell == &tile).unwrap();
+        assert!(!self.rows[row_index][colum_index], "Tile was alrady assigned!");
+        self.rows[row_index][colum_index] = true;
+        0  // TODO: Compute points when adding tile
     }    
+}
+
+fn discard_points(count: usize) -> usize {
+    const SLOTS: [usize; 7] = [1, 1, 2, 2, 2, 3, 3];
+    (0..count).map(|i| if i < 7 { SLOTS[i] } else { 3 }).sum()
 }
 
 #[derive(Clone)]
@@ -183,16 +194,24 @@ impl Player {
     
     // TODO: rename this function
     fn finish_up(&mut self, tray: &mut TileSet) {
+        // start by going through rows and award points for filled rows
         for (row_index, row) in self.rows.iter_mut().enumerate() {
-            /*let row_size = row_index + 1;
+            let row_size = row_index + 1;
             if let Some((tile, count)) = row.clone() {
                 if count == row_size {
-                    //self.wall[] // add tile to wall
+                    let points = self.wall.add_tile(row_index, tile); // add one tile to wall
+                    self.points += points;                    
                     tray[tile] += count - 1; // add rest back to tray
                     *row = None;  // clear row
                 }
-            }*/
+            }
         }
+        // subtract tiles in discard
+        self.points = self.points.saturating_sub(discard_points(self.discard.len()));
+        // move discard into tray
+        let mut tmp = TileSet::new();
+        mem::swap(&mut tmp, &mut self.discard);
+        tray.extend(tmp);
     }
 
     fn tile_count(&self) -> usize {
@@ -280,12 +299,18 @@ impl State {
         let states: Vec<_> = (0..5).flat_map(|row| {
             println!("    placing in row {}", row);
             let mut state = self.clone();
-            state.players[player_index].maybe_place(tile, count, row).then_some(state)
+            if state.players[player_index].maybe_place(tile, count, row) {
+                state.finish_up();
+                Some(state)
+            } else {
+                None
+            }
         }).collect();
         if states.is_empty() {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
+            state.finish_up();
             vec![state]
         } else {
             states
