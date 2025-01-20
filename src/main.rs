@@ -169,11 +169,14 @@ impl Player {
     }
 
     fn maybe_place(&mut self, tile: Tile, count: usize, row_index: usize) -> bool {
+        if self.wall.has_tile(row_index, &tile) {
+            return false;
+        }
         let row_size = row_index + 1;
         if let Some((current_tile, ref mut current_count)) = self.rows[row_index] {
-            if current_tile != tile || self.wall.has_tile(row_index, &tile) {
+            if current_tile != tile {
                 // another tile is used - we can't place here at all
-                return false
+                return false;
             }
             // some spaces used. return how many are left
             let space_left = row_size - *current_count;
