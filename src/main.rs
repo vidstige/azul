@@ -375,11 +375,10 @@ impl<R> GameState<R> for State<R> where R: Rng + Clone {
 }
 
 fn main() {
-    let rng = &mut thread_rng();
     let mut state = State::new(2, thread_rng());
     state.deal();
     while state.winner().is_none() {
         let children = state.children();
-        state = children.choose(rng).unwrap().clone();
+        state = children.choose(&mut state.rng).unwrap().clone();
     }
 }
