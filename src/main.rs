@@ -138,12 +138,32 @@ impl Wall {
         let colum_index = WALL[row_index].iter().position(|cell| cell == tile).unwrap();
         self.rows[row_index][colum_index]
     }
+    fn count(&self, (y, x): (usize, usize), dx: i32, dy: i32) -> usize {
+        let mut points: usize = 0;
+        let (mut y, mut x) = (y, x);
+        while (0..5).contains(&y) && (0..5).contains(&x) && self.rows[y][x] {
+            points += 1;
+            x = (x as i32 + dx) as usize;
+            y = (y as i32 + dy) as usize;
+        }
+        points
+    }
+    fn points_at(&self, colum_index: usize, row_index: usize) -> usize {
+        let mut points: usize = 0;
+        let position = (row_index, colum_index);
+        points += self.count(position, 1, 0);  // right
+        points += self.count(position, -1, 0);  // left
+        points += self.count(position, 0, -1);  // up
+        points += self.count(position, 0, 1);  // down
+        points -= 3; // center is counted thrice
+        points
+    }
     fn add_tile(&mut self, row_index: usize, tile: Tile) -> usize {
         let colum_index = WALL[row_index].iter().position(|cell| cell == &tile).unwrap();
         assert!(!self.rows[row_index][colum_index], "Tile was already assigned!");
         self.rows[row_index][colum_index] = true;
-        0  // TODO: Compute points when adding tile
-    }    
+        self.points_at(colum_index, row_index)
+    }
 }
 
 fn discard_points(count: usize) -> usize {
