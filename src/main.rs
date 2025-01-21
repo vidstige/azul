@@ -158,11 +158,18 @@ impl Wall {
         points -= 3; // center is counted thrice
         points
     }
+    fn bonus_points_at(&self, colum_index: usize, row_index: usize) -> usize {
+        [
+            (0..5).all(|column| self.rows[row_index][column]).then_some(2),
+            (0..5).all(|row| self.rows[row][colum_index]).then_some(7),
+            // TODO: Bonus points if all tiles placed.
+        ].iter().flatten().sum()
+    }
     fn add_tile(&mut self, row_index: usize, tile: Tile) -> usize {
         let colum_index = WALL[row_index].iter().position(|cell| cell == &tile).unwrap();
         assert!(!self.rows[row_index][colum_index], "Tile was already assigned!");
         self.rows[row_index][colum_index] = true;
-        self.points_at(colum_index, row_index)
+        self.points_at(colum_index, row_index) + self.bonus_points_at(colum_index, row_index)
     }
 }
 
