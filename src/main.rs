@@ -443,7 +443,7 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usiz
         let mut alpha = alpha;
         for child in state.children() {
             let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
-            if new_value > best_value {
+            if new_value >= best_value {
                 best_value = new_value;
                 best_state = Some(new_state);
             }            
@@ -459,7 +459,7 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usiz
         let mut beta = beta;
         for child in state.children() {
             let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
-            if new_value < best_value {
+            if new_value <= best_value {
                 best_value = new_value;
                 best_state = Some(new_state);
             }            
