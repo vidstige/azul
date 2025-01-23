@@ -332,7 +332,7 @@ impl<R> State<R> where R: Rng + Clone {
         // them in the discard
         let player_index = self.current_player();
         let states: Vec<_> = (0..5).flat_map(|row| {
-            println!("    placing in row {}", row);
+            //println!("    placing in row {}", row);
             let mut state = self.clone();
             if state.players[player_index].maybe_place(tile, count, row) {
                 state.prepare_next_round();
@@ -376,7 +376,7 @@ impl<R> GameState for State<R> where R: Rng + Clone {
         // take the tiles from one of the factories...
         for factory_index in 0..self.factories.len() {
             let mut state = self.clone();
-            println!("Taking factory #{}", factory_index);
+            //println!("Taking factory #{}", factory_index);
             let factory = state.factories.remove(factory_index);
             // ...and select one color
             for tile in TILES {
@@ -385,7 +385,7 @@ impl<R> GameState for State<R> where R: Rng + Clone {
                 let count = factory.drain(tile);
                 if count > 0 {
                     let mut state = state.clone();
-                    println!("  Taking {} of {:?}", count, tile);
+                    //println!("  Taking {} of {:?}", count, tile);
                     state.center.extend(factory);
                     children.extend(state.place_all(tile, count));
                 }
@@ -397,7 +397,7 @@ impl<R> GameState for State<R> where R: Rng + Clone {
             let mut state = self.clone();
             let count = state.center.drain(tile);
             if count > 0 {
-                println!("  Taking {:?} from center", tile);
+                //println!("  Taking {:?} from center", tile);
                 children.extend(state.place_all(tile, count));
             }
         }
@@ -488,19 +488,26 @@ impl Fish {
 }
 impl<R: Rng + Clone> Evaluation<State<R>> for Fish {
     fn evaulate(&self, state: &State<R>, player: usize) -> i32 {
-        0
+        state.players[player].points as i32
     }
 }
 
+fn random_move<S: GameState, R: Rng>(state: &S, rng: &mut R) -> S {
+    let children = state.children();
+    children.choose(rng).unwrap().clone()
+}
 
 fn main() {
+    let mut rng = thread_rng();
     let evaluation = Fish::new();
     let mut state = State::new(2, thread_rng());
     state.deal();
     while state.winner().is_none() {
-        //let children = state.children();
-        //state = children.choose(&mut state.rng).unwrap().clone();
-        state = search(state, &evaluation, 1);
+        if state.current_player() == 0 {
+            state = search(state, &evaluation, 4);
+        } else {
+            state = random_move(&state, &mut rng);
+        }
     }
     for (index, player) in state.players.iter().enumerate() {
         println!("player #{}, {}", index, player.points);
