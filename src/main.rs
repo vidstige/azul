@@ -430,11 +430,11 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usiz
         return (state, e);
     }
     if let Some(winner) = state.winner() {
-        if winner == player {
-            return (state, i32::MAX);
+        return if winner == player {
+            (state, i32::MAX)
         } else {
-            return (state, i32::MIN);
-        }
+            (state, i32::MIN)
+        };
     }
     
     if state.current_player() == player {
