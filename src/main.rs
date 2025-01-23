@@ -322,9 +322,6 @@ impl<R> State<R> where R: Rng + Clone {
         // 2. Deal new factories
         self.deal();
     }
-    fn current_player(&self) -> usize {
-        self.moves % self.players.len()
-    }
     fn is_game_over(&self) -> bool {
         // game is over if any player has any row with all cells filled
         self.players.iter().any(|player| player.wall.rows.iter().any(|row| row.iter().all(|cell| *cell)))
@@ -364,12 +361,16 @@ impl<R> State<R> where R: Rng + Clone {
     }
 }
 
-trait GameState<R>: Sized {
+trait GameState: Sized + Clone {
+    fn current_player(&self) -> usize;
     fn children(&self) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
 }
 
-impl<R> GameState<R> for State<R> where R: Rng + Clone {
+impl<R> GameState for State<R> where R: Rng + Clone {
+    fn current_player(&self) -> usize {
+        self.moves % self.players.len()
+    }
     fn children(&self) -> Vec<Self> {
         let mut children = Vec::new();
         // take the tiles from one of the factories...
@@ -411,11 +412,97 @@ impl<R> GameState<R> for State<R> where R: Rng + Clone {
     }
 }
 
+// evaulation code
+trait Evaluation<S: GameState> {
+    fn evaulate(&self, state: &S, player: usize) -> i32;
+}
+
+impl<R> Evaluation<State<R>> for State<R> where R: Rng + Clone {
+    fn evaulate(&self, state: &State<R>, player: usize) -> i32 {
+        state.players[player].points as i32
+    }
+}
+
+// search code
+fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
+    if depth == 0 {
+        let e = evaluation.evaulate(&state, state.current_player());
+        return (state, e);
+    }
+    if let Some(winner) = state.winner() {
+        if winner == player {
+            return (state, i32::MAX);
+        } else {
+            return (state, i32::MIN);
+        }
+    }
+    
+    if state.current_player() == player {
+        let mut best_value = i32::MIN;
+        let mut best_state = None;
+        let mut alpha = alpha;
+        for child in state.children() {
+            let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
+            if new_value > best_value {
+                best_value = new_value;
+                best_state = Some(new_state);
+            }            
+            if best_value > beta {
+                break // β cutoff
+            }
+            alpha = alpha.max(best_value);
+        }
+        (best_state.unwrap(), best_value)
+    } else {
+        let mut best_value = i32::MAX;
+        let mut best_state = None;
+        let mut beta = beta;
+        for child in state.children() {
+            let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
+            if new_value < best_value {
+                best_value = new_value;
+                best_state = Some(new_state);
+            }            
+            if best_value < alpha {
+                break // α cutoff
+            }
+            beta = beta.min(best_value);
+        }
+        (best_state.unwrap(), best_value)
+    }
+}
+
+fn search<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, depth: usize) -> S {
+    let player = state.current_player();
+    minmax(state, evaluation, player, depth, i32::MIN, i32::MAX).0
+}
+
+// Could not come up with a good name for a basic stupid evaluation
+struct Fish {
+
+}
+impl Fish {
+    fn new() -> Self {
+        Fish {}
+    }
+}
+impl<R: Rng + Clone> Evaluation<State<R>> for Fish {
+    fn evaulate(&self, state: &State<R>, player: usize) -> i32 {
+        0
+    }
+}
+
+
 fn main() {
+    let evaluation = Fish::new();
     let mut state = State::new(2, thread_rng());
     state.deal();
     while state.winner().is_none() {
-        let children = state.children();
-        state = children.choose(&mut state.rng).unwrap().clone();
+        //let children = state.children();
+        //state = children.choose(&mut state.rng).unwrap().clone();
+        state = search(state, &evaluation, 1);
+    }
+    for (index, player) in state.players.iter().enumerate() {
+        println!("player #{}, {}", index, player.points);
     }
 }
