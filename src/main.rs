@@ -1,9 +1,9 @@
 use std::{iter, mem, ops::{Index, IndexMut}};
-
+use std::hash::Hash;
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom, thread_rng, Rng};
 
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Hash)]
 enum Tile {
     BLACK,
     WHITE,
@@ -35,6 +35,16 @@ struct TileSet {
     azul: usize,
     yellow: usize,
     red: usize,
+}
+
+impl Hash for TileSet {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.black.hash(state);
+        self.white.hash(state);
+        self.azul.hash(state);
+        self.yellow.hash(state);
+        self.red.hash(state);
+    }
 }
 
 impl Index<Tile> for TileSet {
@@ -172,6 +182,11 @@ impl Wall {
         self.points_at(colum_index, row_index) + self.bonus_points_at(colum_index, row_index)
     }
 }
+impl Hash for Wall {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.rows.hash(state);
+    }
+}
 
 fn discard_points(count: usize) -> usize {
     const SLOTS: [usize; 5] = [1, 1, 2, 2, 2];
@@ -261,6 +276,24 @@ struct State<R: Rng + Clone> {
     tray: TileSet,
     players: Vec<Player>,
     moves: usize,
+}
+
+impl<R> Hash for State<R> where R: Rng + Clone {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.bag.hash(state);
+        self.factories.hash(state);
+        self.center.hash(state);
+        self.tray.hash(state);
+        for player in &self.players {
+            player.discard.hash(state);
+            player.points.hash(state);
+            for row in &player.rows {
+                row.hash(state);
+            }
+            player.wall.hash(state);
+        }
+        self.moves.hash(state);
+    }
 }
 
 impl<R> State<R> where R: Rng + Clone {
@@ -361,7 +394,7 @@ impl<R> State<R> where R: Rng + Clone {
     }
 }
 
-trait GameState: Sized + Clone {
+trait GameState: Sized + Clone + Hash {
     fn current_player(&self) -> usize;
     fn children(&self) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
@@ -424,7 +457,7 @@ impl<R> Evaluation<State<R>> for State<R> where R: Rng + Clone {
 }
 
 // search code
-fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
+fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
     if depth == 0 {
         let e = evaluation.evaulate(&state, state.current_player());
         return (state, e);
@@ -472,7 +505,7 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, player: usiz
     }
 }
 
-fn search<S: GameState, E: Evaluation<S>>(state: S, evaluation: &E, depth: usize) -> S {
+fn search<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, depth: usize) -> S {
     let player = state.current_player();
     minmax(state, evaluation, player, depth, i32::MIN, i32::MAX).0
 }
@@ -499,12 +532,12 @@ fn random_move<S: GameState, R: Rng>(state: &S, rng: &mut R) -> S {
 
 fn main() {
     let mut rng = thread_rng();
-    let evaluation = Fish::new();
+    let mut evaluation = Fish::new();
     let mut state = State::new(2, thread_rng());
     state.deal();
     while state.winner().is_none() {
         if state.current_player() == 0 {
-            state = search(state, &evaluation, 4);
+            state = search(state, &mut evaluation, 4);
         } else {
             state = random_move(&state, &mut rng);
         }
