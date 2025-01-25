@@ -453,7 +453,7 @@ trait Evaluation<S: GameState> {
 
     // may re-order (but not modify) states
     fn update(&mut self, state: &S, value: i32) {}
-    fn heuristic(&self, _states: &mut Vec<State>) {}
+    fn heuristic(&self, _states: &mut Vec<S>) {}
 }
 
 impl Evaluation<State> for State {
@@ -481,7 +481,9 @@ fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, 
         let mut best_value = i32::MIN;
         let mut best_state = None;
         let mut alpha = alpha;
-        for child in state.children(rng) {
+        let mut children = state.children(rng);
+        evaluation.heuristic(&mut children);
+        for child in children {
             let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
             if new_value >= best_value {
                 best_value = new_value;
@@ -492,12 +494,15 @@ fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, 
             }
             alpha = alpha.max(best_value);
         }
+        evaluation.update(best_state.as_ref().unwrap(), best_value);
         (best_state.unwrap(), best_value)
     } else {
         let mut best_value = i32::MAX;
         let mut best_state = None;
         let mut beta = beta;
-        for child in state.children(rng) {
+        let mut children = state.children(rng);
+        evaluation.heuristic(&mut children);
+        for child in children {
             let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
             if new_value <= best_value {
                 best_value = new_value;
@@ -508,6 +513,7 @@ fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, 
             }
             beta = beta.min(best_value);
         }
+        evaluation.update(best_state.as_ref().unwrap(), best_value);
         (best_state.unwrap(), best_value)
     }
 }
