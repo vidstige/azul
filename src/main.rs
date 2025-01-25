@@ -343,15 +343,14 @@ impl State {
     // clean up by updating score, dealing new tiles, etc
     fn prepare_next_round<R: Rng>(&mut self, rng: &mut R) {
         // are the more tiles?
-        if !self.is_empty() {
-            return;
+        if self.is_empty() {
+            // 1. Score and move tiles to tray/wall
+            for player in &mut self.players {
+                player.prepare_next_round(&mut self.tray);
+            }
+            // 2. Deal new factories
+            self.deal(rng);
         }
-        // 1. Score and move tiles to tray/wall
-        for player in &mut self.players {
-            player.prepare_next_round(&mut self.tray);
-        }
-        // 2. Deal new factories
-        self.deal(rng);
         // 3. Update current player
         self.moves += 1;
     }
@@ -462,65 +461,72 @@ impl Evaluation<State> for State {
     }
 }
 
-// search code
-fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, rng: &mut R, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
+// search code. returns child index and evaluation
+fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: &S, evaluation: &mut E, rng: &mut R, player: usize, depth: usize, alpha: i32, beta: i32) -> (Option<usize>, i32) {
     if depth == 0 {
         let e = evaluation.evaulate(&state, state.current_player());
-        evaluation.update(&state, e);
-        return (state, e);
+        //evaluation.update(&state, e);
+        return (None, e);
     }
     if let Some(winner) = state.winner() {
         return if winner == player {
-            (state, i32::MAX)
+            (None, i32::MAX)
         } else {
-            (state, i32::MIN)
+            (None, i32::MIN)
         };
     }
-    
+
     if state.current_player() == player {
         let mut best_value = i32::MIN;
-        let mut best_state = None;
+        let mut best_index = None;
         let mut alpha = alpha;
         let mut children = state.children(rng);
         evaluation.heuristic(&mut children);
-        for child in children {
-            let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
+        for (index, child) in children.iter().enumerate() {
+            let new_value = minmax(child, evaluation, rng, player, depth - 1, alpha, beta).1;
             if new_value >= best_value {
                 best_value = new_value;
-                best_state = Some(new_state);
+                best_index = Some(index);
             }            
             if best_value > beta {
                 break // β cutoff
             }
             alpha = alpha.max(best_value);
         }
-        evaluation.update(best_state.as_ref().unwrap(), best_value);
-        (best_state.unwrap(), best_value)
+        //evaluation.update(best_state.as_ref().unwrap(), best_value);
+        (best_index, best_value)
     } else {
         let mut best_value = i32::MAX;
-        let mut best_state = None;
+        let mut best_index = None;
         let mut beta = beta;
         let mut children = state.children(rng);
         evaluation.heuristic(&mut children);
-        for child in children {
-            let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
+        for (index, child) in children.iter().enumerate() {
+            let new_value = minmax(child, evaluation, rng, player, depth - 1, alpha, beta).1;
             if new_value <= best_value {
                 best_value = new_value;
-                best_state = Some(new_state);
+                best_index = Some(index);
             }            
             if best_value < alpha {
                 break // α cutoff
             }
             beta = beta.min(best_value);
         }
-        evaluation.update(best_state.as_ref().unwrap(), best_value);
-        (best_state.unwrap(), best_value)
+        //evaluation.update(best_state.as_ref().unwrap(), best_value);
+        (best_index, best_value)
     }
 }
 
-fn search<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, rng: &mut R, depth: usize) -> S {
+fn search<S: GameState, E: Evaluation<S>, R: Rng>(state: &S, evaluation: &mut E, rng: &mut R, depth: usize) -> Option<S> {
     let player = state.current_player();
-    minmax(state, evaluation, rng, player, depth, i32::MIN, i32::MAX).0
+    if let Some(index) = minmax(state, evaluation, rng, player, depth, i32::MIN, i32::MAX).0 {
+        // TODO: children called twice - once in minmax and once here...
+        // The might get different bags due to rng
+        let children = state.children(rng);
+        Some(children[index].clone())
+    } else {
+        None
+    }
 }
 
 // Could not come up with a good name for a basic stupid evaluation
@@ -540,8 +546,8 @@ impl Evaluation<State> for Fish {
         self.cache.insert(state.clone(), value);
     }
     fn heuristic(&self, states: &mut Vec<State>) {
-        states.sort_by_key(|state| self.cache.get(state));
-        states.reverse();
+        //states.sort_by_key(|state| self.cache.get(state));
+        //states.reverse();
     }
 }
 
@@ -554,10 +560,12 @@ fn main() {
     let mut rng = thread_rng();
     let mut evaluation = Fish::new();
     let mut state = State::new(2);
+    let names = ["Samuel", "Maria"];
     state.deal(&mut rng);
     while state.winner().is_none() {
+        println!("round {}: {}", state.moves, names[state.current_player()]);
         if state.current_player() == 0 {
-            state = search(state, &mut evaluation, &mut rng, 4);
+            state = search(&state, &mut evaluation, &mut rng, 4).unwrap();
         } else {
             state = random_move(&state, &mut rng);
         }
