@@ -1,9 +1,9 @@
-use std::{iter, mem, ops::{Index, IndexMut}};
+use std::{collections::HashMap, iter, mem, ops::{Index, IndexMut}};
 use std::hash::Hash;
 use rand::{distributions::WeightedIndex, prelude::Distribution, seq::SliceRandom, thread_rng, Rng};
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Tile {
     BLACK,
     WHITE,
@@ -28,7 +28,7 @@ impl TryFrom<usize> for Tile {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct TileSet {
     black: usize,
     white: usize,
@@ -126,7 +126,7 @@ impl TileSet {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Wall {
     rows: [[bool; 5]; 5],
 }
@@ -193,7 +193,7 @@ fn discard_points(count: usize) -> usize {
     (0..count).map(|i| if i < SLOTS.len() { SLOTS[i] } else { 3 }).sum()
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Player {
     rows: [Option<(Tile, usize)>; 5],
     points: usize,
@@ -267,7 +267,7 @@ impl Player {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct State {
     bag: TileSet,
     factories: Vec<TileSet>,
@@ -392,7 +392,7 @@ impl State {
     }
 }
 
-trait GameState: Sized + Clone + Hash {
+trait GameState: Sized + Clone + Hash + Eq {
     fn current_player(&self) -> usize;
     fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
@@ -446,6 +446,12 @@ impl GameState for State {
 // evaulation code
 trait Evaluation<S: GameState> {
     fn evaulate(&self, state: &S, player: usize) -> i32;
+    
+    // TODO: Move heuristic into separate trait
+
+    // may re-order (but not modify) states
+    fn update(&mut self, state: &S, value: i32) {}
+    fn heuristic(&self, _states: &mut Vec<State>) {}
 }
 
 impl Evaluation<State> for State {
@@ -458,6 +464,7 @@ impl Evaluation<State> for State {
 fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, rng: &mut R, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
     if depth == 0 {
         let e = evaluation.evaulate(&state, state.current_player());
+        evaluation.update(&state, e);
         return (state, e);
     }
     if let Some(winner) = state.winner() {
@@ -510,16 +517,23 @@ fn search<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, 
 
 // Could not come up with a good name for a basic stupid evaluation
 struct Fish {
-
+    cache: HashMap<State, i32>,
 }
 impl Fish {
     fn new() -> Self {
-        Fish {}
+        Fish { cache: HashMap::new() }
     }
 }
 impl Evaluation<State> for Fish {
     fn evaulate(&self, state: &State, player: usize) -> i32 {
         state.players[player].points as i32
+    }
+    fn update(&mut self, state: &State, value: i32) {
+        self.cache.insert(state.clone(), value);
+    }
+    fn heuristic(&self, states: &mut Vec<State>) {
+        states.sort_by_key(|state| self.cache.get(state));
+        states.reverse();
     }
 }
 
