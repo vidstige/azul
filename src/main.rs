@@ -352,6 +352,8 @@ impl State {
         }
         // 2. Deal new factories
         self.deal(rng);
+        // 3. Update current player
+        self.moves += 1;
     }
     fn is_game_over(&self) -> bool {
         // game is over if any player has any row with all cells filled
