@@ -268,8 +268,7 @@ impl Player {
 }
 
 #[derive(Clone)]
-struct State<R: Rng + Clone> {
-    rng: R,
+struct State {
     bag: TileSet,
     factories: Vec<TileSet>,
     center: TileSet,
@@ -278,7 +277,7 @@ struct State<R: Rng + Clone> {
     moves: usize,
 }
 
-impl<R> Hash for State<R> where R: Rng + Clone {
+impl Hash for State {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bag.hash(state);
         self.factories.hash(state);
@@ -296,8 +295,8 @@ impl<R> Hash for State<R> where R: Rng + Clone {
     }
 }
 
-impl<R> State<R> where R: Rng + Clone {
-    fn new(players: usize, rng: R) -> Self {
+impl State {
+    fn new(players: usize) -> Self {
         let bag = [
             iter::repeat(Tile::BLACK).take(20),
             iter::repeat(Tile::WHITE).take(20),
@@ -307,7 +306,6 @@ impl<R> State<R> where R: Rng + Clone {
         ].into_iter().flat_map(|it| it).collect();
         let players = iter::repeat(Player::new()).take(players).collect();
         Self {
-            rng,
             bag,
             factories: Vec::new(),
             center: TileSet::new(),
@@ -325,7 +323,7 @@ impl<R> State<R> where R: Rng + Clone {
             self.players.iter().map(|p| p.tile_count()).sum(),
         ].iter().sum()
     }
-    fn deal(&mut self) {
+    fn deal<R: Rng>(&mut self, rng: &mut R) {
         let n = 5; // TODO: Compute based on number of players
         if self.bag.len() < 4 * n {
             // move tiles from tray to bag
@@ -335,7 +333,7 @@ impl<R> State<R> where R: Rng + Clone {
         }
         // deal factories
         for _ in 0..n {
-            let tiles = self.bag.draw(&mut self.rng, 4);
+            let tiles = self.bag.draw(rng, 4);
             self.factories.push(tiles);
         }
     }
@@ -343,7 +341,7 @@ impl<R> State<R> where R: Rng + Clone {
         self.factories.iter().map(|factory| factory.len()).sum::<usize>() + self.center.len() == 0
     }
     // clean up by updating score, dealing new tiles, etc
-    fn prepare_next_round(&mut self) {
+    fn prepare_next_round<R: Rng>(&mut self, rng: &mut R) {
         // are the more tiles?
         if !self.is_empty() {
             return;
@@ -353,13 +351,13 @@ impl<R> State<R> where R: Rng + Clone {
             player.prepare_next_round(&mut self.tray);
         }
         // 2. Deal new factories
-        self.deal();
+        self.deal(rng);
     }
     fn is_game_over(&self) -> bool {
         // game is over if any player has any row with all cells filled
         self.players.iter().any(|player| player.wall.rows.iter().any(|row| row.iter().all(|cell| *cell)))
     }
-    fn place_all(&self, tile: Tile, count: usize) -> Vec<Self> {
+    fn place_all<R: Rng>(&self, tile: Tile, count: usize, rng: &mut R) -> Vec<Self> {
         // Put the "count" number of "tile" on one row. Return a state for each
         // such placement. Furthermore the tiles cannot be placed anywhere, place
         // them in the discard
@@ -368,7 +366,7 @@ impl<R> State<R> where R: Rng + Clone {
             //println!("    placing in row {}", row);
             let mut state = self.clone();
             if state.players[player_index].maybe_place(tile, count, row) {
-                state.prepare_next_round();
+                state.prepare_next_round(rng);
                 Some(state)
             } else {
                 None
@@ -378,7 +376,7 @@ impl<R> State<R> where R: Rng + Clone {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
-            state.prepare_next_round();
+            state.prepare_next_round(rng);
             vec![state]
         } else {
             states
@@ -396,15 +394,15 @@ impl<R> State<R> where R: Rng + Clone {
 
 trait GameState: Sized + Clone + Hash {
     fn current_player(&self) -> usize;
-    fn children(&self) -> Vec<Self>;
+    fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
 }
 
-impl<R> GameState for State<R> where R: Rng + Clone {
+impl GameState for State {
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
-    fn children(&self) -> Vec<Self> {
+    fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self> {
         let mut children = Vec::new();
         // take the tiles from one of the factories...
         for factory_index in 0..self.factories.len() {
@@ -420,7 +418,7 @@ impl<R> GameState for State<R> where R: Rng + Clone {
                     let mut state = state.clone();
                     //println!("  Taking {} of {:?}", count, tile);
                     state.center.extend(factory);
-                    children.extend(state.place_all(tile, count));
+                    children.extend(state.place_all(tile, count, rng));
                 }
             }
         }
@@ -431,7 +429,7 @@ impl<R> GameState for State<R> where R: Rng + Clone {
             let count = state.center.drain(tile);
             if count > 0 {
                 //println!("  Taking {:?} from center", tile);
-                children.extend(state.place_all(tile, count));
+                children.extend(state.place_all(tile, count, rng));
             }
         }
         children
@@ -450,14 +448,14 @@ trait Evaluation<S: GameState> {
     fn evaulate(&self, state: &S, player: usize) -> i32;
 }
 
-impl<R> Evaluation<State<R>> for State<R> where R: Rng + Clone {
-    fn evaulate(&self, state: &State<R>, player: usize) -> i32 {
+impl Evaluation<State> for State {
+    fn evaulate(&self, state: &State, player: usize) -> i32 {
         state.players[player].points as i32
     }
 }
 
 // search code
-fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
+fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, rng: &mut R, player: usize, depth: usize, alpha: i32, beta: i32) -> (S, i32) {
     if depth == 0 {
         let e = evaluation.evaulate(&state, state.current_player());
         return (state, e);
@@ -474,8 +472,8 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, player: 
         let mut best_value = i32::MIN;
         let mut best_state = None;
         let mut alpha = alpha;
-        for child in state.children() {
-            let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
+        for child in state.children(rng) {
+            let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
             if new_value >= best_value {
                 best_value = new_value;
                 best_state = Some(new_state);
@@ -490,8 +488,8 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, player: 
         let mut best_value = i32::MAX;
         let mut best_state = None;
         let mut beta = beta;
-        for child in state.children() {
-            let (new_state, new_value) = minmax(child, evaluation, player, depth - 1, alpha, beta);
+        for child in state.children(rng) {
+            let (new_state, new_value) = minmax(child, evaluation, rng, player, depth - 1, alpha, beta);
             if new_value <= best_value {
                 best_value = new_value;
                 best_state = Some(new_state);
@@ -505,9 +503,9 @@ fn minmax<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, player: 
     }
 }
 
-fn search<S: GameState, E: Evaluation<S>>(state: S, evaluation: &mut E, depth: usize) -> S {
+fn search<S: GameState, E: Evaluation<S>, R: Rng>(state: S, evaluation: &mut E, rng: &mut R, depth: usize) -> S {
     let player = state.current_player();
-    minmax(state, evaluation, player, depth, i32::MIN, i32::MAX).0
+    minmax(state, evaluation, rng, player, depth, i32::MIN, i32::MAX).0
 }
 
 // Could not come up with a good name for a basic stupid evaluation
@@ -519,25 +517,25 @@ impl Fish {
         Fish {}
     }
 }
-impl<R: Rng + Clone> Evaluation<State<R>> for Fish {
-    fn evaulate(&self, state: &State<R>, player: usize) -> i32 {
+impl Evaluation<State> for Fish {
+    fn evaulate(&self, state: &State, player: usize) -> i32 {
         state.players[player].points as i32
     }
 }
 
 fn random_move<S: GameState, R: Rng>(state: &S, rng: &mut R) -> S {
-    let children = state.children();
+    let children = state.children(rng);
     children.choose(rng).unwrap().clone()
 }
 
 fn main() {
     let mut rng = thread_rng();
     let mut evaluation = Fish::new();
-    let mut state = State::new(2, thread_rng());
-    state.deal();
+    let mut state = State::new(2);
+    state.deal(&mut rng);
     while state.winner().is_none() {
         if state.current_player() == 0 {
-            state = search(state, &mut evaluation, 4);
+            state = search(state, &mut evaluation, &mut rng, 4);
         } else {
             state = random_move(&state, &mut rng);
         }
