@@ -571,6 +571,6 @@ fn main() {
         }
     }
     for (index, player) in state.players.iter().enumerate() {
-        println!("player #{}, {}", index, player.points);
+        println!("player {}, {}", names[index], player.points);
     }
 }
