@@ -3,7 +3,7 @@ mod minmax;
 
 use crate::{
     azul::{Fish, State},
-    minmax::{random_move, search, GameState},
+    minmax::{random_move, search, DeterministicGameState},
 };
 use rand::thread_rng;
 

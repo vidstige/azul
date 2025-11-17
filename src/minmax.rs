@@ -1,13 +1,29 @@
 use rand::{seq::SliceRandom, Rng};
 use std::hash::Hash;
 
-pub trait GameState: Sized + Clone + Hash + Eq {
+#[derive(Clone)]
+pub enum GameState<D, S> {
+    Deterministic(D),
+    Stochastic(S),
+}
+
+pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
+    type Stochastic: StochasticGameState;
+
     fn current_player(&self) -> usize;
     fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self>;
     fn winner(&self) -> Option<usize>;
+
+    fn select<R: Rng>(&self, _rng: &mut R) -> GameState<Self, Self::Stochastic> {
+        GameState::Deterministic(self.clone())
+    }
 }
 
-pub trait Evaluation<S: GameState> {
+pub trait StochasticGameState: Sized + Clone + Hash + Eq {}
+
+impl StochasticGameState for () {}
+
+pub trait Evaluation<S: DeterministicGameState> {
     fn evaulate(&self, state: &S, player: usize) -> i32;
 
     // TODO: Move heuristic into separate trait
@@ -18,7 +34,7 @@ pub trait Evaluation<S: GameState> {
 }
 
 // search code. returns child index and evaluation
-pub fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(
+pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     state: &S,
     evaluation: &mut E,
     rng: &mut R,
@@ -81,7 +97,7 @@ pub fn minmax<S: GameState, E: Evaluation<S>, R: Rng>(
     }
 }
 
-pub fn search<S: GameState, E: Evaluation<S>, R: Rng>(
+pub fn search<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     state: &S,
     evaluation: &mut E,
     rng: &mut R,
@@ -98,7 +114,7 @@ pub fn search<S: GameState, E: Evaluation<S>, R: Rng>(
     }
 }
 
-pub fn random_move<S: GameState, R: Rng>(state: &S, rng: &mut R) -> S {
+pub fn random_move<S: DeterministicGameState, R: Rng>(state: &S, rng: &mut R) -> S {
     let children = state.children(rng);
     children.choose(rng).unwrap().clone()
 }

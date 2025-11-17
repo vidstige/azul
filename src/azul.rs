@@ -1,4 +1,4 @@
-use crate::minmax::{Evaluation, GameState};
+use crate::minmax::{DeterministicGameState, Evaluation};
 use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 use std::{
     collections::HashMap,
@@ -483,7 +483,9 @@ impl State {
     }
 }
 
-impl GameState for State {
+impl DeterministicGameState for State {
+    type Stochastic = ();
+
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
