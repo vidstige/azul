@@ -8,7 +8,7 @@ pub enum GameState<D, S> {
 }
 
 pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
-    type Stochastic: StochasticGameState;
+    type Stochastic: StochasticGameState<Deterministic = Self>;
 
     fn current_player(&self) -> usize;
     fn children(&self) -> Vec<GameState<Self, Self::Stochastic>>;
@@ -20,8 +20,9 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
 }
 
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
-    type Deterministic: DeterministicGameState;
+    type Deterministic: DeterministicGameState<Stochastic = Self>;
 
+    // TODO: outcomes should be able to be stochastic themselves
     fn outcomes(&self) -> Vec<(f32, Self::Deterministic)>;
 }
 
@@ -37,78 +38,100 @@ pub trait Evaluation<S: DeterministicGameState> {
 
 // search code. returns child index and evaluation
 pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
-    state: &S,
+    state: GameState<S, S::Stochastic>,
     evaluation: &mut E,
     player: usize,
     depth: usize,
     alpha: i32,
     beta: i32,
 ) -> (Option<usize>, i32) {
-    if depth == 0 {
-        let e = evaluation.evaulate(&state, state.current_player());
-        //evaluation.update(&state, e);
-        return (None, e);
-    }
-    if let Some(winner) = state.winner() {
-        return if winner == player {
-            (None, i32::MAX)
-        } else {
-            (None, i32::MIN)
-        };
-    }
+    match state {
+        GameState::Deterministic(state) => {
+            if depth == 0 {
+                let e = evaluation.evaulate(&state, state.current_player());
+                return (None, e);
+            }
+            if let Some(winner) = state.winner() {
+                return if winner == player {
+                    (None, i32::MAX)
+                } else {
+                    (None, i32::MIN)
+                };
+            }
 
-    if state.current_player() == player {
-        let mut best_value = i32::MIN;
-        let mut best_index = None;
-        let mut alpha = alpha;
-        let mut children: Vec<_> = state
-            .children()
-            .into_iter()
-            .filter_map(|child| match child {
-                GameState::Deterministic(child) => Some(child),
-                GameState::Stochastic(_) => None,
-            })
-            .collect();
-        evaluation.heuristic(&mut children);
-        for (index, child) in children.iter().enumerate() {
-            let new_value = minmax(child, evaluation, player, depth - 1, alpha, beta).1;
-            if new_value >= best_value {
-                best_value = new_value;
-                best_index = Some(index);
+            if state.current_player() == player {
+                let mut best_value = i32::MIN;
+                let mut best_index = None;
+                let mut alpha = alpha;
+                let mut children: Vec<_> = state
+                    .children()
+                    .into_iter()
+                    .filter_map(|child| match child {
+                        GameState::Deterministic(child) => Some(child),
+                        GameState::Stochastic(_) => None,
+                    })
+                    .collect();
+                evaluation.heuristic(&mut children);
+                for (index, child) in children.iter().enumerate() {
+                    let new_value = minmax(
+                        GameState::Deterministic(child.clone()),
+                        evaluation,
+                        player,
+                        depth - 1,
+                        alpha,
+                        beta,
+                    )
+                    .1;
+                    if new_value >= best_value {
+                        best_value = new_value;
+                        best_index = Some(index);
+                    }
+                    if best_value > beta {
+                        break; // β cutoff
+                    }
+                    alpha = alpha.max(best_value);
+                }
+                (best_index, best_value)
+            } else {
+                let mut best_value = i32::MAX;
+                let mut best_index = None;
+                let mut beta = beta;
+                let mut children: Vec<_> = state
+                    .children()
+                    .into_iter()
+                    .filter_map(|child| match child {
+                        GameState::Deterministic(child) => Some(child),
+                        GameState::Stochastic(_) => None,
+                    })
+                    .collect();
+                evaluation.heuristic(&mut children);
+                for (index, child) in children.iter().enumerate() {
+                    let new_value = minmax(
+                        GameState::Deterministic(child.clone()),
+                        evaluation,
+                        player,
+                        depth - 1,
+                        alpha,
+                        beta,
+                    )
+                    .1;
+                    if new_value <= best_value {
+                        best_value = new_value;
+                        best_index = Some(index);
+                    }
+                    if best_value < alpha {
+                        break; // α cutoff
+                    }
+                    beta = beta.min(best_value);
+                }
+                (best_index, best_value)
             }
-            if best_value > beta {
-                break; // β cutoff
-            }
-            alpha = alpha.max(best_value);
         }
-        //evaluation.update(best_state.as_ref().unwrap(), best_value);
-        (best_index, best_value)
-    } else {
-        let mut best_value = i32::MAX;
-        let mut best_index = None;
-        let mut beta = beta;
-        let mut children: Vec<_> = state
-            .children()
-            .into_iter()
-            .filter_map(|child| match child {
-                GameState::Deterministic(child) => Some(child),
-                GameState::Stochastic(_) => None,
-            })
-            .collect();
-        evaluation.heuristic(&mut children);
-        for (index, child) in children.iter().enumerate() {
-            let new_value = minmax(child, evaluation, player, depth - 1, alpha, beta).1;
-            if new_value <= best_value {
-                best_value = new_value;
-                best_index = Some(index);
-            }
-            if best_value < alpha {
-                break; // α cutoff
-            }
-            beta = beta.min(best_value);
+        GameState::Stochastic(chance) => {
+            let value =
+                chance_value(&chance, evaluation, player, depth, alpha, beta).round() as i32;
+            (None, value)
         }
-        //evaluation.update(best_state.as_ref().unwrap(), best_value);
-        (best_index, best_value)
     }
 }
 
@@ -118,7 +141,16 @@ pub fn search<S: DeterministicGameState, E: Evaluation<S>>(
     depth: usize,
 ) -> Option<S> {
     let player = state.current_player();
-    if let Some(index) = minmax(state, evaluation, player, depth, i32::MIN, i32::MAX).0 {
+    if let Some(index) = minmax(
+        GameState::Deterministic(state.clone()),
+        evaluation,
+        player,
+        depth,
+        i32::MIN,
+        i32::MAX,
+    )
+    .0
+    {
         // TODO: children called twice - once in minmax and once here...
         // They might get different bags due to rng
         let children: Vec<_> = state
@@ -145,4 +177,30 @@ pub fn random_move<S: DeterministicGameState, R: Rng>(state: &S, rng: &mut R) ->
         })
         .collect();
     children.choose(rng).unwrap().clone()
+}
+
+fn chance_value<S: DeterministicGameState, E: Evaluation<S>>(
+    chance: &S::Stochastic,
+    evaluation: &mut E,
+    player: usize,
+    depth: usize,
+    alpha: i32,
+    beta: i32,
+) -> f32 {
+    chance
+        .outcomes()
+        .into_iter()
+        .map(|(probability, outcome)| {
+            let value = minmax(
+                GameState::Deterministic(outcome),
+                evaluation,
+                player,
+                depth,
+                alpha,
+                beta,
+            )
+            .1 as f32;
+            probability * value
+        })
+        .sum()
 }
