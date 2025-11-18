@@ -33,7 +33,7 @@ pub trait Evaluation<S: DeterministicGameState> {
 
     // may re-order (but not modify) states
     fn update(&mut self, _state: &S, _value: i32) {}
-    fn heuristic(&self, _states: &mut Vec<S>) {}
+    fn heuristic(&self, _states: &mut Vec<GameState<S, S::Stochastic>>) {}
 }
 
 // search code. returns child index and evaluation
@@ -63,25 +63,11 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
                 let mut best_value = i32::MIN;
                 let mut best_index = None;
                 let mut alpha = alpha;
-                let mut children: Vec<_> = state
-                    .children()
-                    .into_iter()
-                    .filter_map(|child| match child {
-                        GameState::Deterministic(child) => Some(child),
-                        GameState::Stochastic(_) => None,
-                    })
-                    .collect();
+                let mut children = state.children();
                 evaluation.heuristic(&mut children);
-                for (index, child) in children.iter().enumerate() {
-                    let new_value = minmax(
-                        GameState::Deterministic(child.clone()),
-                        evaluation,
-                        player,
-                        depth - 1,
-                        alpha,
-                        beta,
-                    )
-                    .1;
+                for (index, child) in children.into_iter().enumerate() {
+                    let new_value =
+                        minmax(child.clone(), evaluation, player, depth - 1, alpha, beta).1;
                     if new_value >= best_value {
                         best_value = new_value;
                         best_index = Some(index);
@@ -96,25 +82,11 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
                 let mut best_value = i32::MAX;
                 let mut best_index = None;
                 let mut beta = beta;
-                let mut children: Vec<_> = state
-                    .children()
-                    .into_iter()
-                    .filter_map(|child| match child {
-                        GameState::Deterministic(child) => Some(child),
-                        GameState::Stochastic(_) => None,
-                    })
-                    .collect();
+                let mut children = state.children();
                 evaluation.heuristic(&mut children);
-                for (index, child) in children.iter().enumerate() {
-                    let new_value = minmax(
-                        GameState::Deterministic(child.clone()),
-                        evaluation,
-                        player,
-                        depth - 1,
-                        alpha,
-                        beta,
-                    )
-                    .1;
+                for (index, child) in children.into_iter().enumerate() {
+                    let new_value =
+                        minmax(child.clone(), evaluation, player, depth - 1, alpha, beta).1;
                     if new_value <= best_value {
                         best_value = new_value;
                         best_index = Some(index);

@@ -579,7 +579,7 @@ impl Evaluation<State> for Fish {
     fn update(&mut self, state: &State, value: i32) {
         self.cache.insert(state.clone(), value);
     }
-    fn heuristic(&self, _states: &mut Vec<State>) {
+    fn heuristic(&self, _states: &mut Vec<GameState<State, State>>) {
         //states.sort_by_key(|state| self.cache.get(state));
         //states.reverse();
     }
