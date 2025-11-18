@@ -19,9 +19,11 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     }
 }
 
-pub trait StochasticGameState: Sized + Clone + Hash + Eq {}
+pub trait StochasticGameState: Sized + Clone + Hash + Eq {
+    type Deterministic: DeterministicGameState;
 
-impl StochasticGameState for () {}
+    fn outcomes(&self) -> Vec<(f32, Self::Deterministic)>;
+}
 
 pub trait Evaluation<S: DeterministicGameState> {
     fn evaulate(&self, state: &S, player: usize) -> i32;

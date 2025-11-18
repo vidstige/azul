@@ -487,10 +487,16 @@ impl State {
     }
 }
 
-impl StochasticGameState for State {}
+impl StochasticGameState for State {
+    type Deterministic = State;
+
+    fn outcomes(&self) -> Vec<(f32, Self::Deterministic)> {
+        vec![(1.0, self.clone())]
+    }
+}
 
 impl DeterministicGameState for State {
-    type Stochastic = Self;
+    type Stochastic = State;
 
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
