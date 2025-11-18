@@ -1,4 +1,4 @@
-use crate::minmax::{DeterministicGameState, Evaluation};
+use crate::minmax::{DeterministicGameState, Evaluation, GameState, StochasticGameState};
 use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 use std::{
     collections::HashMap,
@@ -483,13 +483,15 @@ impl State {
     }
 }
 
+impl StochasticGameState for State {}
+
 impl DeterministicGameState for State {
-    type Stochastic = ();
+    type Stochastic = Self;
 
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
-    fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self> {
+    fn children<R: Rng>(&self, rng: &mut R) -> Vec<GameState<Self, Self::Stochastic>> {
         let mut children = Vec::new();
         // take the tiles from one of the factories...
         for factory_index in 0..self.factories.len() {
@@ -505,7 +507,12 @@ impl DeterministicGameState for State {
                     let mut state = state.clone();
                     //println!("  Taking {} of {:?}", count, tile);
                     state.center.extend(factory);
-                    children.extend(state.place_all(tile, count, rng));
+                    children.extend(
+                        state
+                            .place_all(tile, count, rng)
+                            .into_iter()
+                            .map(GameState::Deterministic),
+                    );
                 }
             }
         }
@@ -515,8 +522,12 @@ impl DeterministicGameState for State {
             let mut state = self.clone();
             let count = state.center.drain(tile);
             if count > 0 {
-                //println!("  Taking {:?} from center", tile);
-                children.extend(state.place_all(tile, count, rng));
+                children.extend(
+                    state
+                        .place_all(tile, count, rng)
+                        .into_iter()
+                        .map(GameState::Deterministic),
+                );
             }
         }
         children

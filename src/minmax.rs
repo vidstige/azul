@@ -11,7 +11,7 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     type Stochastic: StochasticGameState;
 
     fn current_player(&self) -> usize;
-    fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self>;
+    fn children<R: Rng>(&self, rng: &mut R) -> Vec<GameState<Self, Self::Stochastic>>;
     fn winner(&self) -> Option<usize>;
 
     fn select<R: Rng>(&self, _rng: &mut R) -> GameState<Self, Self::Stochastic> {
@@ -60,7 +60,14 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
         let mut best_value = i32::MIN;
         let mut best_index = None;
         let mut alpha = alpha;
-        let mut children = state.children(rng);
+        let mut children: Vec<_> = state
+            .children(rng)
+            .into_iter()
+            .filter_map(|child| match child {
+                GameState::Deterministic(child) => Some(child),
+                GameState::Stochastic(_) => None,
+            })
+            .collect();
         evaluation.heuristic(&mut children);
         for (index, child) in children.iter().enumerate() {
             let new_value = minmax(child, evaluation, rng, player, depth - 1, alpha, beta).1;
@@ -79,7 +86,14 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
         let mut best_value = i32::MAX;
         let mut best_index = None;
         let mut beta = beta;
-        let mut children = state.children(rng);
+        let mut children: Vec<_> = state
+            .children(rng)
+            .into_iter()
+            .filter_map(|child| match child {
+                GameState::Deterministic(child) => Some(child),
+                GameState::Stochastic(_) => None,
+            })
+            .collect();
         evaluation.heuristic(&mut children);
         for (index, child) in children.iter().enumerate() {
             let new_value = minmax(child, evaluation, rng, player, depth - 1, alpha, beta).1;
@@ -106,15 +120,29 @@ pub fn search<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     let player = state.current_player();
     if let Some(index) = minmax(state, evaluation, rng, player, depth, i32::MIN, i32::MAX).0 {
         // TODO: children called twice - once in minmax and once here...
-        // The might get different bags due to rng
-        let children = state.children(rng);
-        Some(children[index].clone())
+        // They might get different bags due to rng
+        let children: Vec<_> = state
+            .children(rng)
+            .into_iter()
+            .filter_map(|child| match child {
+                GameState::Deterministic(child) => Some(child),
+                GameState::Stochastic(_) => None,
+            })
+            .collect();
+        children.get(index).cloned()
     } else {
         None
     }
 }
 
 pub fn random_move<S: DeterministicGameState, R: Rng>(state: &S, rng: &mut R) -> S {
-    let children = state.children(rng);
+    let children: Vec<_> = state
+        .children(rng)
+        .into_iter()
+        .filter_map(|child| match child {
+            GameState::Deterministic(child) => Some(child),
+            GameState::Stochastic(_) => None,
+        })
+        .collect();
     children.choose(rng).unwrap().clone()
 }
