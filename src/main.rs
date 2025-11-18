@@ -14,9 +14,10 @@ fn main() {
     let names = ["Samuel", "Maria"];
     state.deal(&mut rng);
     while state.winner().is_none() {
+        state.resolve_stochastic(&mut rng);
         println!("round {}: {}", state.moves, names[state.current_player()]);
         if state.current_player() == 0 {
-            state = search(&state, &mut evaluation, &mut rng, 4).unwrap();
+            state = search(&state, &mut evaluation, 4).unwrap();
         } else {
             state = random_move(&state, &mut rng);
         }

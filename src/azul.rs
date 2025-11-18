@@ -414,6 +414,11 @@ impl State {
             self.factories.push(tiles);
         }
     }
+    pub fn resolve_stochastic<R: Rng>(&mut self, rng: &mut R) {
+        if self.is_empty() && !self.is_game_over() {
+            self.deal(rng);
+        }
+    }
     fn is_empty(&self) -> bool {
         self.factories
             .iter()
@@ -423,15 +428,14 @@ impl State {
             == 0
     }
     // clean up by updating score, dealing new tiles, etc
-    fn prepare_next_round<R: Rng>(&mut self, rng: &mut R) {
+    fn prepare_next_round(&mut self) {
         // are the more tiles?
         if self.is_empty() {
             // 1. Score and move tiles to tray/wall
             for player in &mut self.players {
                 player.prepare_next_round(&mut self.tray);
             }
-            // 2. Deal new factories
-            self.deal(rng);
+            // dealing happens in stochastic phase
         }
         // 3. Update current player
         self.moves += 1;
@@ -446,7 +450,7 @@ impl State {
                 .any(|row| row.iter().all(|cell| *cell))
         })
     }
-    fn place_all<R: Rng>(&self, tile: Tile, count: usize, rng: &mut R) -> Vec<Self> {
+    fn place_all(&self, tile: Tile, count: usize) -> Vec<Self> {
         // Put the "count" number of "tile" on one row. Return a state for each
         // such placement. Furthermore the tiles cannot be placed anywhere, place
         // them in the discard
@@ -456,7 +460,7 @@ impl State {
                 //println!("    placing in row {}", row);
                 let mut state = self.clone();
                 if state.players[player_index].maybe_place(tile, count, row) {
-                    state.prepare_next_round(rng);
+                    state.prepare_next_round();
                     Some(state)
                 } else {
                     None
@@ -467,7 +471,7 @@ impl State {
             // player must discard all tiles :-(
             let mut state = self.clone();
             state.players[player_index].discard[tile] += count;
-            state.prepare_next_round(rng);
+            state.prepare_next_round();
             vec![state]
         } else {
             states
@@ -491,7 +495,11 @@ impl DeterministicGameState for State {
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
-    fn children<R: Rng>(&self, rng: &mut R) -> Vec<GameState<Self, Self::Stochastic>> {
+    fn children(&self) -> Vec<GameState<Self, Self::Stochastic>> {
+        if self.is_empty() {
+            // Time to deal factories
+            return vec![GameState::Stochastic(self.clone())];
+        }
         let mut children = Vec::new();
         // take the tiles from one of the factories...
         for factory_index in 0..self.factories.len() {
@@ -509,7 +517,7 @@ impl DeterministicGameState for State {
                     state.center.extend(factory);
                     children.extend(
                         state
-                            .place_all(tile, count, rng)
+                            .place_all(tile, count)
                             .into_iter()
                             .map(GameState::Deterministic),
                     );
@@ -524,7 +532,7 @@ impl DeterministicGameState for State {
             if count > 0 {
                 children.extend(
                     state
-                        .place_all(tile, count, rng)
+                        .place_all(tile, count)
                         .into_iter()
                         .map(GameState::Deterministic),
                 );
