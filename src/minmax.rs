@@ -153,15 +153,11 @@ pub fn search<S: DeterministicGameState, E: Evaluation<S>>(
     {
         // TODO: children called twice - once in minmax and once here...
         // They might get different bags due to rng
-        let children: Vec<_> = state
-            .children()
-            .into_iter()
-            .filter_map(|child| match child {
-                GameState::Deterministic(child) => Some(child),
-                GameState::Stochastic(_) => None,
-            })
-            .collect();
-        children.get(index).cloned()
+        let children: Vec<_> = state.children();
+        children.get(index).cloned().and_then(|child| match child {
+            GameState::Deterministic(child) => Some(child),
+            GameState::Stochastic(_) => None,
+        })
     } else {
         None
     }
