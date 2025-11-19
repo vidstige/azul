@@ -13,10 +13,6 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     fn current_player(&self) -> usize;
     fn children(&self) -> Vec<GameState<Self, Self::Stochastic>>;
     fn winner(&self) -> Option<usize>;
-
-    fn select<R: Rng>(&self, _rng: &mut R) -> GameState<Self, Self::Stochastic> {
-        GameState::Deterministic(self.clone())
-    }
 }
 
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
