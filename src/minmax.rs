@@ -18,8 +18,7 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
     type Deterministic: DeterministicGameState<Stochastic = Self>;
 
-    // TODO: outcomes should be able to be stochastic themselves
-    fn outcomes(&self) -> Vec<(f32, Self::Deterministic)>;
+    fn outcomes(&self) -> Vec<(f32, GameState<Self::Deterministic, Self>)>;
 }
 
 pub trait Evaluation<S: DeterministicGameState> {
@@ -155,15 +154,7 @@ fn chance_value<S: DeterministicGameState, E: Evaluation<S>>(
         .outcomes()
         .into_iter()
         .map(|(probability, outcome)| {
-            let value = minmax(
-                GameState::Deterministic(outcome),
-                evaluation,
-                player,
-                depth,
-                alpha,
-                beta,
-            )
-            .1 as f32;
+            let value = minmax(outcome, evaluation, player, depth, alpha, beta).1 as f32;
             probability * value
         })
         .sum()

@@ -490,8 +490,8 @@ impl State {
 impl StochasticGameState for State {
     type Deterministic = State;
 
-    fn outcomes(&self) -> Vec<(f32, Self::Deterministic)> {
-        vec![(1.0, self.clone())]
+    fn outcomes(&self) -> Vec<(f32, GameState<Self::Deterministic, Self>)> {
+        vec![(1.0, GameState::Deterministic(self.clone()))]
     }
 }
 
