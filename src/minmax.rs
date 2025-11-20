@@ -15,10 +15,15 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     fn winner(&self) -> Option<usize>;
 }
 
+pub trait Outcomes<D, S>: IntoIterator<Item = (f32, GameState<D, S>)> {
+    fn len(&self) -> usize;
+}
+
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
     type Deterministic: DeterministicGameState<Stochastic = Self>;
+    type Outcomes: Outcomes<Self::Deterministic, Self>;
 
-    fn outcomes(&self) -> Vec<(f32, GameState<Self::Deterministic, Self>)>;
+    fn outcomes(&self) -> Self::Outcomes;
 }
 
 pub trait Evaluation<S: DeterministicGameState> {

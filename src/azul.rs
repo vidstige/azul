@@ -1,4 +1,4 @@
-use crate::minmax::{DeterministicGameState, Evaluation, GameState, StochasticGameState};
+use crate::minmax::{DeterministicGameState, Evaluation, GameState, Outcomes, StochasticGameState};
 use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 use std::{
     collections::HashMap,
@@ -487,11 +487,39 @@ impl State {
     }
 }
 
+pub struct AzulOutcomes {
+    state: State,
+}
+
+impl AzulOutcomes {
+    fn new(state: &State) -> Self {
+        Self {
+            state: state.clone(),
+        }
+    }
+}
+
+impl Outcomes<State, State> for AzulOutcomes {
+    fn len(&self) -> usize {
+        0
+    }
+}
+
+impl IntoIterator for AzulOutcomes {
+    type Item = (f32, GameState<State, State>);
+    type IntoIter = std::option::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Some((1.0, GameState::Deterministic(self.state))).into_iter()
+    }
+}
+
 impl StochasticGameState for State {
     type Deterministic = State;
+    type Outcomes = AzulOutcomes;
 
-    fn outcomes(&self) -> Vec<(f32, GameState<Self::Deterministic, Self>)> {
-        vec![(1.0, GameState::Deterministic(self.clone()))]
+    fn outcomes(&self) -> Self::Outcomes {
+        AzulOutcomes::new(self)
     }
 }
 
