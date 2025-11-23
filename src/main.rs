@@ -17,7 +17,7 @@ fn main() {
         state.resolve_stochastic(&mut rng);
         println!("round {}: {}", state.moves, names[state.current_player()]);
         if state.current_player() == 0 {
-            state = search(&state, &mut evaluation, 4).unwrap();
+            state = search(&state, &mut evaluation, 4, &mut rng).unwrap();
         } else {
             state = random_move(&state, &mut rng);
         }

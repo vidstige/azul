@@ -15,8 +15,8 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     fn winner(&self) -> Option<usize>;
 }
 
-pub trait Outcomes<D, S>: IntoIterator<Item = (f32, GameState<D, S>)> {
-    fn len(&self) -> usize;
+pub trait Outcomes<D, S> {
+    fn sample<R: Rng>(&self, rng: &mut R, samples: usize) -> Vec<(f32, GameState<D, S>)>;
 }
 
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
@@ -37,9 +37,10 @@ pub trait Evaluation<S: DeterministicGameState> {
 }
 
 // search code. returns child index and evaluation
-pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
+pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     state: GameState<S, S::Stochastic>,
     evaluation: &mut E,
+    rng: &mut R,
     player: usize,
     depth: usize,
     alpha: i32,
@@ -66,8 +67,16 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
                 let mut children = state.children();
                 evaluation.heuristic(&mut children);
                 for (index, child) in children.into_iter().enumerate() {
-                    let new_value =
-                        minmax(child.clone(), evaluation, player, depth - 1, alpha, beta).1;
+                    let new_value = minmax(
+                        child.clone(),
+                        evaluation,
+                        rng,
+                        player,
+                        depth - 1,
+                        alpha,
+                        beta,
+                    )
+                    .1;
                     if new_value >= best_value {
                         best_value = new_value;
                         best_index = Some(index);
@@ -85,8 +94,16 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
                 let mut children = state.children();
                 evaluation.heuristic(&mut children);
                 for (index, child) in children.into_iter().enumerate() {
-                    let new_value =
-                        minmax(child.clone(), evaluation, player, depth - 1, alpha, beta).1;
+                    let new_value = minmax(
+                        child.clone(),
+                        evaluation,
+                        rng,
+                        player,
+                        depth - 1,
+                        alpha,
+                        beta,
+                    )
+                    .1;
                     if new_value <= best_value {
                         best_value = new_value;
                         best_index = Some(index);
@@ -100,22 +117,24 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>>(
             }
         }
         GameState::Stochastic(chance) => {
-            let value =
-                chance_value(&chance, evaluation, player, depth, alpha, beta).round() as i32;
+            let value = chance_value(&chance, evaluation, rng, player, depth, alpha, beta).round()
+                as i32;
             (None, value)
         }
     }
 }
 
-pub fn search<S: DeterministicGameState, E: Evaluation<S>>(
+pub fn search<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     state: &S,
     evaluation: &mut E,
     depth: usize,
+    rng: &mut R,
 ) -> Option<S> {
     let player = state.current_player();
     if let Some(index) = minmax(
         GameState::Deterministic(state.clone()),
         evaluation,
+        rng,
         player,
         depth,
         i32::MIN,
@@ -147,20 +166,28 @@ pub fn random_move<S: DeterministicGameState, R: Rng>(state: &S, rng: &mut R) ->
     children.choose(rng).unwrap().clone()
 }
 
-fn chance_value<S: DeterministicGameState, E: Evaluation<S>>(
+fn chance_value<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     chance: &S::Stochastic,
     evaluation: &mut E,
+    rng: &mut R,
     player: usize,
     depth: usize,
     alpha: i32,
     beta: i32,
 ) -> f32 {
-    chance
-        .outcomes()
+    const SAMPLE_COUNT: usize = 32;
+    let samples = chance.outcomes().sample(rng, SAMPLE_COUNT.max(1));
+    let total_weight: f32 = samples.iter().map(|(probability, _)| *probability).sum();
+    assert!(
+        total_weight > 0.0,
+        "chance node sampling produced zero total probability"
+    );
+    samples
         .into_iter()
         .map(|(probability, outcome)| {
-            let value = minmax(outcome, evaluation, player, depth, alpha, beta).1 as f32;
-            probability * value
+            let normalized = probability / total_weight;
+            let value = minmax(outcome, evaluation, rng, player, depth, alpha, beta).1 as f32;
+            normalized * value
         })
         .sum()
 }

@@ -500,17 +500,23 @@ impl AzulOutcomes {
 }
 
 impl Outcomes<State, State> for AzulOutcomes {
-    fn len(&self) -> usize {
-        0
-    }
-}
-
-impl IntoIterator for AzulOutcomes {
-    type Item = (f32, GameState<State, State>);
-    type IntoIter = std::option::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Some((1.0, GameState::Deterministic(self.state))).into_iter()
+    fn sample<R: Rng>(
+        &self,
+        rng: &mut R,
+        k: usize,
+    ) -> Vec<(f32, GameState<State, State>)> {
+        if !self.state.is_empty() || self.state.is_game_over() {
+            return vec![(1.0, GameState::Deterministic(self.state.clone()))];
+        }
+        let mut outcomes = Vec::new();
+        let samples = k.max(1);
+        let weight = 1.0 / samples as f32;
+        for _ in 0..samples {
+            let mut state = self.state.clone();
+            state.deal(rng);
+            outcomes.push((weight, GameState::Deterministic(state)));
+        }
+        outcomes
     }
 }
 
