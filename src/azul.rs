@@ -471,11 +471,7 @@ impl AzulOutcomes {
 }
 
 impl Outcomes<State, State> for AzulOutcomes {
-    fn sample<R: Rng>(
-        &self,
-        rng: &mut R,
-        k: usize,
-    ) -> Vec<(f32, GameState<State, State>)> {
+    fn sample<R: Rng>(&self, rng: &mut R, k: usize) -> Vec<(f32, GameState<State, State>)> {
         assert!(
             self.state.is_empty() && !self.state.is_game_over(),
             "AzulOutcomes::sample called when no stochastic refill is pending"
@@ -562,8 +558,12 @@ impl DeterministicGameState for State {
 }
 
 impl Evaluation<State> for State {
-    fn evaulate(&self, state: &State, player: usize) -> i32 {
-        state.players[player].points as i32
+    fn evaulate(&self, state: &GameState<State, State>, player: usize) -> i32 {
+        match state {
+            GameState::Deterministic(state) | GameState::Stochastic(state) => {
+                state.players[player].points as i32
+            }
+        }
     }
 }
 
@@ -590,8 +590,12 @@ impl Fish {
     }
 }
 impl Evaluation<State> for Fish {
-    fn evaulate(&self, state: &State, player: usize) -> i32 {
-        state.players[player].points as i32
+    fn evaulate(&self, state: &GameState<State, State>, player: usize) -> i32 {
+        match state {
+            GameState::Deterministic(state) | GameState::Stochastic(state) => {
+                state.players[player].points as i32
+            }
+        }
     }
     fn update(&mut self, state: &GameState<State, State>, value: i32) {
         let hash = Self::state_hash(state);

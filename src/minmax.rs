@@ -27,7 +27,7 @@ pub trait StochasticGameState: Sized + Clone + Hash + Eq {
 }
 
 pub trait Evaluation<S: DeterministicGameState> {
-    fn evaulate(&self, state: &S, player: usize) -> i32;
+    fn evaulate(&self, state: &GameState<S, S::Stochastic>, player: usize) -> i32;
 
     // TODO: Move heuristic into separate trait
 
@@ -49,7 +49,7 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     match &state {
         GameState::Deterministic(deterministic_state) => {
             if depth == 0 {
-                let e = evaluation.evaulate(deterministic_state, deterministic_state.current_player());
+                let e = evaluation.evaulate(&state, deterministic_state.current_player());
                 evaluation.update(&state, e);
                 return (None, e);
             }
