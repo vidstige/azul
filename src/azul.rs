@@ -1,8 +1,8 @@
 use crate::minmax::{DeterministicGameState, Evaluation, GameState, Outcomes, StochasticGameState};
 use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 use std::{
-    collections::HashMap,
-    hash::Hash,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::{Hash, Hasher},
     iter, mem,
     ops::{Index, IndexMut},
 };
@@ -598,7 +598,7 @@ impl Evaluation<State> for State {
 
 // Could not come up with a good name for a basic stupid evaluation
 pub struct Fish {
-    cache: HashMap<State, i32>,
+    cache: HashMap<u64, i32>,
 }
 impl Fish {
     pub fn new() -> Self {
@@ -606,27 +606,27 @@ impl Fish {
             cache: HashMap::new(),
         }
     }
+
+    fn state_hash(state: &GameState<State, State>) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        state.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn cached_value(&self, state: &GameState<State, State>) -> Option<i32> {
+        let hash = Self::state_hash(state);
+        self.cache.get(&hash).copied()
+    }
 }
 impl Evaluation<State> for Fish {
     fn evaulate(&self, state: &State, player: usize) -> i32 {
         state.players[player].points as i32
     }
     fn update(&mut self, state: &GameState<State, State>, value: i32) {
-        match state {
-            GameState::Deterministic(state) | GameState::Stochastic(state) => {
-                self.cache.insert(state.clone(), value);
-            }
-        }
+        let hash = Self::state_hash(state);
+        self.cache.insert(hash, value);
     }
     fn heuristic(&self, states: &mut Vec<GameState<State, State>>) {
-        let cached_value =
-            |game_state: &GameState<State, State>| -> Option<i32> {
-                match game_state {
-                    GameState::Deterministic(state) | GameState::Stochastic(state) => {
-                        self.cache.get(state).copied()
-                    }
-                }
-            };
-        states.sort_by(|a, b| cached_value(b).cmp(&cached_value(a)));
+        states.sort_by(|a, b| self.cached_value(b).cmp(&self.cached_value(a)));
     }
 }
