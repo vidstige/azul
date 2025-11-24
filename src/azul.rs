@@ -146,42 +146,13 @@ impl TileSet {
 struct Wall {
     rows: [[bool; 5]; 5],
 }
+#[rustfmt::skip]
 const WALL: [[Tile; 5]; 5] = [
-    [
-        Tile::AZUL,
-        Tile::YELLOW,
-        Tile::RED,
-        Tile::BLACK,
-        Tile::WHITE,
-    ],
-    [
-        Tile::WHITE,
-        Tile::AZUL,
-        Tile::YELLOW,
-        Tile::RED,
-        Tile::BLACK,
-    ],
-    [
-        Tile::BLACK,
-        Tile::WHITE,
-        Tile::AZUL,
-        Tile::YELLOW,
-        Tile::RED,
-    ],
-    [
-        Tile::RED,
-        Tile::BLACK,
-        Tile::WHITE,
-        Tile::AZUL,
-        Tile::YELLOW,
-    ],
-    [
-        Tile::YELLOW,
-        Tile::RED,
-        Tile::BLACK,
-        Tile::WHITE,
-        Tile::AZUL,
-    ],
+    [Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK, Tile::WHITE],
+    [Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK],
+    [Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED],
+    [Tile::RED, Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW],
+    [Tile::YELLOW, Tile::RED, Tile::BLACK, Tile::WHITE, Tile::AZUL],
 ];
 impl Wall {
     fn new() -> Self {
