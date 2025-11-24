@@ -15,15 +15,17 @@ pub trait DeterministicGameState: Sized + Clone + Hash + Eq {
     fn winner(&self) -> Option<usize>;
 }
 
-pub trait Outcomes<D, S> {
+pub trait Outcomes<'a, D, S> {
     fn sample<R: Rng>(&self, rng: &mut R, samples: usize) -> Vec<(f32, GameState<D, S>)>;
 }
 
 pub trait StochasticGameState: Sized + Clone + Hash + Eq {
     type Deterministic: DeterministicGameState<Stochastic = Self>;
-    type Outcomes: Outcomes<Self::Deterministic, Self>;
+    type Outcomes<'a>: Outcomes<'a, Self::Deterministic, Self>
+    where
+        Self: 'a;
 
-    fn outcomes(&self) -> Self::Outcomes;
+    fn outcomes(&self) -> Self::Outcomes<'_>;
 }
 
 pub trait Evaluation<S: DeterministicGameState> {

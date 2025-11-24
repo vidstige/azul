@@ -458,19 +458,17 @@ impl State {
     }
 }
 
-pub struct AzulOutcomes {
-    state: State,
+pub struct AzulOutcomes<'a> {
+    state: &'a State,
 }
 
-impl AzulOutcomes {
-    fn new(state: &State) -> Self {
-        Self {
-            state: state.clone(),
-        }
+impl<'a> AzulOutcomes<'a> {
+    fn new(state: &'a State) -> Self {
+        Self { state }
     }
 }
 
-impl Outcomes<State, State> for AzulOutcomes {
+impl<'a> Outcomes<'a, State, State> for AzulOutcomes<'a> {
     fn sample<R: Rng>(&self, rng: &mut R, k: usize) -> Vec<(f32, GameState<State, State>)> {
         assert!(
             self.state.is_empty() && !self.state.is_game_over(),
@@ -490,9 +488,9 @@ impl Outcomes<State, State> for AzulOutcomes {
 
 impl StochasticGameState for State {
     type Deterministic = State;
-    type Outcomes = AzulOutcomes;
+    type Outcomes<'a> = AzulOutcomes<'a>;
 
-    fn outcomes(&self) -> Self::Outcomes {
+    fn outcomes(&self) -> Self::Outcomes<'_> {
         AzulOutcomes::new(self)
     }
 }
