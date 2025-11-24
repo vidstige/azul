@@ -557,16 +557,6 @@ impl DeterministicGameState for State {
     }
 }
 
-impl Evaluation<State> for State {
-    fn evaulate(&self, state: &GameState<State, State>, player: usize) -> i32 {
-        match state {
-            GameState::Deterministic(state) | GameState::Stochastic(state) => {
-                state.players[player].points as i32
-            }
-        }
-    }
-}
-
 // Could not come up with a good name for a basic stupid evaluation
 pub struct Fish {
     cache: HashMap<u64, i32>,
