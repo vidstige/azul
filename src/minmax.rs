@@ -1,7 +1,7 @@
 use rand::{seq::SliceRandom, Rng};
 use std::hash::Hash;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum GameState<D, S> {
     Deterministic(D),
     Stochastic(S),
@@ -32,7 +32,7 @@ pub trait Evaluation<S: DeterministicGameState> {
     // TODO: Move heuristic into separate trait
 
     // may re-order (but not modify) states
-    fn update(&mut self, _state: &S, _value: i32) {}
+    fn update(&mut self, _state: &GameState<S, S::Stochastic>, _value: i32) {}
     fn heuristic(&self, _states: &mut Vec<GameState<S, S::Stochastic>>) {}
 }
 
@@ -46,13 +46,14 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
     alpha: i32,
     beta: i32,
 ) -> (Option<usize>, i32) {
-    match state {
-        GameState::Deterministic(state) => {
+    match &state {
+        GameState::Deterministic(deterministic_state) => {
             if depth == 0 {
-                let e = evaluation.evaulate(&state, state.current_player());
+                let e = evaluation.evaulate(deterministic_state, deterministic_state.current_player());
+                evaluation.update(&state, e);
                 return (None, e);
             }
-            if let Some(winner) = state.winner() {
+            if let Some(winner) = deterministic_state.winner() {
                 return if winner == player {
                     (None, i32::MAX)
                 } else {
@@ -60,11 +61,11 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
                 };
             }
 
-            if state.current_player() == player {
+            if deterministic_state.current_player() == player {
                 let mut best_value = i32::MIN;
                 let mut best_index = None;
                 let mut alpha = alpha;
-                let mut children = state.children();
+                let mut children = deterministic_state.children();
                 evaluation.heuristic(&mut children);
                 for (index, child) in children.into_iter().enumerate() {
                     let new_value = minmax(
@@ -77,6 +78,7 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
                         beta,
                     )
                     .1;
+                    evaluation.update(&child, new_value);
                     if new_value >= best_value {
                         best_value = new_value;
                         best_index = Some(index);
@@ -86,12 +88,13 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
                     }
                     alpha = alpha.max(best_value);
                 }
+                evaluation.update(&state, best_value);
                 (best_index, best_value)
             } else {
                 let mut best_value = i32::MAX;
                 let mut best_index = None;
                 let mut beta = beta;
-                let mut children = state.children();
+                let mut children = deterministic_state.children();
                 evaluation.heuristic(&mut children);
                 for (index, child) in children.into_iter().enumerate() {
                     let new_value = minmax(
@@ -104,6 +107,7 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
                         beta,
                     )
                     .1;
+                    evaluation.update(&child, new_value);
                     if new_value <= best_value {
                         best_value = new_value;
                         best_index = Some(index);
@@ -113,12 +117,14 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
                     }
                     beta = beta.min(best_value);
                 }
+                evaluation.update(&state, best_value);
                 (best_index, best_value)
             }
         }
         GameState::Stochastic(chance) => {
-            let value = chance_value(&chance, evaluation, rng, player, depth, alpha, beta).round()
-                as i32;
+            let value =
+                chance_value(chance, evaluation, rng, player, depth, alpha, beta).round() as i32;
+            evaluation.update(&state, value);
             (None, value)
         }
     }

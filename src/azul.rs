@@ -611,11 +611,22 @@ impl Evaluation<State> for Fish {
     fn evaulate(&self, state: &State, player: usize) -> i32 {
         state.players[player].points as i32
     }
-    fn update(&mut self, state: &State, value: i32) {
-        self.cache.insert(state.clone(), value);
+    fn update(&mut self, state: &GameState<State, State>, value: i32) {
+        match state {
+            GameState::Deterministic(state) | GameState::Stochastic(state) => {
+                self.cache.insert(state.clone(), value);
+            }
+        }
     }
-    fn heuristic(&self, _states: &mut Vec<GameState<State, State>>) {
-        //states.sort_by_key(|state| self.cache.get(state));
-        //states.reverse();
+    fn heuristic(&self, states: &mut Vec<GameState<State, State>>) {
+        let cached_value =
+            |game_state: &GameState<State, State>| -> Option<i32> {
+                match game_state {
+                    GameState::Deterministic(state) | GameState::Stochastic(state) => {
+                        self.cache.get(state).copied()
+                    }
+                }
+            };
+        states.sort_by(|a, b| cached_value(b).cmp(&cached_value(a)));
     }
 }
