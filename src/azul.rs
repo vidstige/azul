@@ -505,9 +505,10 @@ impl Outcomes<State, State> for AzulOutcomes {
         rng: &mut R,
         k: usize,
     ) -> Vec<(f32, GameState<State, State>)> {
-        if !self.state.is_empty() || self.state.is_game_over() {
-            return vec![(1.0, GameState::Deterministic(self.state.clone()))];
-        }
+        assert!(
+            self.state.is_empty() && !self.state.is_game_over(),
+            "AzulOutcomes::sample called when no stochastic refill is pending"
+        );
         let mut outcomes = Vec::new();
         let samples = k.max(1);
         let weight = 1.0 / samples as f32;
