@@ -8,14 +8,14 @@ use std::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Tile {
+pub(crate) enum Tile {
     BLACK,
     WHITE,
     AZUL,
     YELLOW,
     RED,
 }
-const TILES: [Tile; 5] = [
+pub(crate) const TILES: [Tile; 5] = [
     Tile::BLACK,
     Tile::WHITE,
     Tile::AZUL,
@@ -39,7 +39,7 @@ impl TryFrom<usize> for Tile {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct TileSet {
+pub(crate) struct TileSet {
     black: usize,
     white: usize,
     azul: usize,
@@ -137,17 +137,17 @@ impl TileSet {
         self.red += tileset.red;
     }
 
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.black + self.white + self.azul + self.yellow + self.red
     }
 }
 
 #[derive(Clone, PartialEq, Eq)]
-struct Wall {
-    rows: [[bool; 5]; 5],
+pub(crate) struct Wall {
+    pub(crate) rows: [[bool; 5]; 5],
 }
 #[rustfmt::skip]
-const WALL: [[Tile; 5]; 5] = [
+pub(crate) const WALL: [[Tile; 5]; 5] = [
     [Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK, Tile::WHITE],
     [Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED, Tile::BLACK],
     [Tile::BLACK, Tile::WHITE, Tile::AZUL, Tile::YELLOW, Tile::RED],
@@ -230,10 +230,10 @@ fn discard_points(count: usize) -> usize {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Player {
-    rows: [Option<(Tile, usize)>; 5],
+    pub(crate) rows: [Option<(Tile, usize)>; 5],
     pub points: usize,
-    wall: Wall,
-    discard: TileSet,
+    pub(crate) wall: Wall,
+    pub(crate) discard: TileSet,
 }
 impl Player {
     fn new() -> Self {
@@ -312,10 +312,10 @@ impl Player {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct State {
-    bag: TileSet,
-    factories: Vec<TileSet>,
-    center: TileSet,
-    tray: TileSet,
+    pub(crate) bag: TileSet,
+    pub(crate) factories: Vec<TileSet>,
+    pub(crate) center: TileSet,
+    pub(crate) tray: TileSet,
     pub players: Vec<Player>,
     pub moves: usize,
 }
