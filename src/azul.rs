@@ -380,9 +380,9 @@ impl State {
             self.bag.extend(tmp);
         }
         // deal factories
-        for _ in 0..n {
-            let tiles = self.bag.draw(rng, 4);
-            self.factories.push(tiles);
+        self.factories.resize_with(n, TileSet::new);
+        for factory in &mut self.factories {
+            *factory = self.bag.draw(rng, 4);
         }
     }
     pub fn resolve_stochastic<R: Rng>(&mut self, rng: &mut R) {
@@ -511,7 +511,7 @@ impl DeterministicGameState for State {
         for factory_index in 0..self.factories.len() {
             let mut state = self.clone();
             //println!("Taking factory #{}", factory_index);
-            let factory = state.factories.remove(factory_index);
+            let factory = mem::replace(&mut state.factories[factory_index], TileSet::new());
             // ...and select one color
             for tile in TILES {
                 // take tile and leave rest in center
