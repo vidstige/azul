@@ -449,6 +449,46 @@ impl State {
         }
     }
 
+    fn deterministic_moves(&self) -> Vec<GameState<State, State>> {
+        let mut children = Vec::new();
+        // take the tiles from one of the factories...
+        for factory_index in 0..self.factories.len() {
+            let mut state = self.clone();
+            let factory = mem::replace(&mut state.factories[factory_index], TileSet::new());
+            // ...and select one color
+            for tile in TILES {
+                // take tile and leave rest in center
+                let mut factory = factory.clone();
+                let count = factory.drain(tile);
+                if count > 0 {
+                    let mut state = state.clone();
+                    state.center.extend(factory);
+                    children.extend(
+                        state
+                            .place_all(tile, count)
+                            .into_iter()
+                            .map(GameState::Deterministic),
+                    );
+                }
+            }
+        }
+        // Or take all tiles of one type from the center
+        for tile in TILES {
+            // take tile from center
+            let mut state = self.clone();
+            let count = state.center.drain(tile);
+            if count > 0 {
+                children.extend(
+                    state
+                        .place_all(tile, count)
+                        .into_iter()
+                        .map(GameState::Deterministic),
+                );
+            }
+        }
+        children
+    }
+
     pub fn self_check(&self) {
         let n = self.tile_count();
         if n != 100 {
@@ -506,45 +546,7 @@ impl DeterministicGameState for State {
             // Time to deal factories
             return vec![GameState::Stochastic(self.clone())];
         }
-        let mut children = Vec::new();
-        // take the tiles from one of the factories...
-        for factory_index in 0..self.factories.len() {
-            let mut state = self.clone();
-            //println!("Taking factory #{}", factory_index);
-            let factory = mem::replace(&mut state.factories[factory_index], TileSet::new());
-            // ...and select one color
-            for tile in TILES {
-                // take tile and leave rest in center
-                let mut factory = factory.clone();
-                let count = factory.drain(tile);
-                if count > 0 {
-                    let mut state = state.clone();
-                    //println!("  Taking {} of {:?}", count, tile);
-                    state.center.extend(factory);
-                    children.extend(
-                        state
-                            .place_all(tile, count)
-                            .into_iter()
-                            .map(GameState::Deterministic),
-                    );
-                }
-            }
-        }
-        // Or take all tiles of one type from the center
-        for tile in TILES {
-            // take tile from center
-            let mut state = self.clone();
-            let count = state.center.drain(tile);
-            if count > 0 {
-                children.extend(
-                    state
-                        .place_all(tile, count)
-                        .into_iter()
-                        .map(GameState::Deterministic),
-                );
-            }
-        }
-        children
+        self.deterministic_moves()
     }
     fn winner(&self) -> Option<usize> {
         if self.is_game_over() {
