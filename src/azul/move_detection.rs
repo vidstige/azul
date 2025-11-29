@@ -16,7 +16,7 @@ fn row_is_legal(player: &Player, row_index: usize, tile: Tile) -> bool {
     }
     match player.rows[row_index] {
         None => true,
-        Some((current_tile, _)) => current_tile == tile,
+        Some((current_tile, count)) => current_tile == tile && count < row_index + 1,
     }
 }
 
