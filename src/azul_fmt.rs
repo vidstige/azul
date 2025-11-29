@@ -48,35 +48,60 @@ pub fn render_state(state: &State, names: &[&str]) -> String {
     writeln!(&mut buffer, "Tray: {}", format_tileset_summary(&state.tray)).unwrap();
     writeln!(&mut buffer, "Bag: {}", format_tileset_summary(&state.bag)).unwrap();
     buffer.push('\n');
-    for (index, player) in state.players.iter().enumerate() {
-        writeln!(
-            &mut buffer,
-            "{} (points: {})",
-            format_player_label(names, index),
-            player.points
-        )
-        .unwrap();
-        writeln!(&mut buffer, "  Pattern / Wall:").unwrap();
-        for row_index in 0..5 {
-            let pattern = format_pattern_row(row_index, &player.rows[row_index]);
-            let wall_line = format_wall_row(row_index, &player.wall.rows[row_index]);
-            writeln!(
-                &mut buffer,
-                "    {:>2}: {} || {}",
-                row_index + 1,
-                pattern,
-                wall_line
-            )
-            .unwrap();
+    let player_sections: Vec<Vec<String>> = state
+        .players
+        .iter()
+        .enumerate()
+        .map(|(index, player)| {
+            let mut lines = Vec::new();
+            lines.push(format!(
+                "{} (points: {})",
+                format_player_label(names, index),
+                player.points
+            ));
+            lines.push("  Pattern / Wall:".to_string());
+            for row_index in 0..5 {
+                let pattern = format_pattern_row(row_index, &player.rows[row_index]);
+                let wall_line = format_wall_row(row_index, &player.wall.rows[row_index]);
+                lines.push(format!(
+                    "    {:>2}: {} || {}",
+                    row_index + 1,
+                    pattern,
+                    wall_line
+                ));
+            }
+            lines.push(format!(
+                "  Discard: {}",
+                format_tileset_summary(&player.discard)
+            ));
+            lines
+        })
+        .collect();
+    let column_widths: Vec<usize> = player_sections
+        .iter()
+        .map(|lines| lines.iter().map(|line| visible_width(line)).max().unwrap_or(0))
+        .collect();
+    let max_lines = player_sections
+        .iter()
+        .map(|lines| lines.len())
+        .max()
+        .unwrap_or(0);
+    for line_index in 0..max_lines {
+        let mut row = String::new();
+        for (player_index, lines) in player_sections.iter().enumerate() {
+            let content = lines.get(line_index).map(|line| line.as_str()).unwrap_or("");
+            row.push_str(&pad_to_visible_width(
+                content,
+                column_widths[player_index],
+            ));
+            if player_index + 1 != player_sections.len() {
+                row.push_str("    ");
+            }
         }
-        writeln!(
-            &mut buffer,
-            "  Discard: {}",
-            format_tileset_summary(&player.discard)
-        )
-        .unwrap();
+        buffer.push_str(&row);
         buffer.push('\n');
     }
+    buffer.push('\n');
     buffer
 }
 
@@ -181,6 +206,38 @@ fn format_wall_row(row_index: usize, wall_row: &[bool; 5]) -> String {
         }
     }
     cells.join(" ")
+}
+
+fn visible_width(text: &str) -> usize {
+    let mut width = 0;
+    let mut skipping = false;
+    for ch in text.chars() {
+        if skipping {
+            if ch == 'm' {
+                skipping = false;
+            }
+            continue;
+        }
+        if ch == '\u{1b}' {
+            skipping = true;
+            continue;
+        }
+        width += 1;
+    }
+    width
+}
+
+fn pad_to_visible_width(text: &str, width: usize) -> String {
+    let visible = visible_width(text);
+    if visible >= width {
+        return text.to_string();
+    }
+    let mut result = String::with_capacity(text.len() + width - visible);
+    result.push_str(text);
+    for _ in 0..(width - visible) {
+        result.push(' ');
+    }
+    result
 }
 
 impl fmt::Display for MoveDescription {
