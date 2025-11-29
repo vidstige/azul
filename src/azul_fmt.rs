@@ -1,8 +1,10 @@
 use crate::{
-    azul::{State, Tile, TileSet, TILES, WALL},
+    azul::{
+        MoveDescription, MoveDestination, MoveError, MoveOrigin, State, Tile, TileSet, TILES, WALL,
+    },
     minmax::DeterministicGameState,
 };
-use std::fmt::Write;
+use std::fmt::{self, Write};
 
 pub fn print_state(state: &State, names: &[&str]) {
     println!("{}", render_state(state, names));
@@ -179,4 +181,56 @@ fn format_wall_row(row_index: usize, wall_row: &[bool; 5]) -> String {
         }
     }
     cells.join(" ")
+}
+
+impl fmt::Display for MoveDescription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let origin = match self.origin {
+            MoveOrigin::Factory(index) => format!("factory {}", index + 1),
+            MoveOrigin::Center => "the center".to_string(),
+        };
+        let plural = if self.count == 1 { "" } else { "s" };
+        match self.destination {
+            MoveDestination::Row(row) => {
+                write!(
+                    f,
+                    "Player #{} took {} {:?} tile{} from {} and placed {} on row {}",
+                    self.player_index + 1,
+                    self.count,
+                    self.tile,
+                    plural,
+                    origin,
+                    self.placed,
+                    row + 1
+                )?;
+                if self.discarded > 0 {
+                    write!(f, " ({} discarded)", self.discarded)?;
+                }
+            }
+            MoveDestination::Discard => {
+                let pronoun = if self.count == 1 { "it" } else { "them" };
+                write!(
+                    f,
+                    "Player #{} took {} {:?} tile{} from {} and discarded {}",
+                    self.player_index + 1,
+                    self.count,
+                    self.tile,
+                    plural,
+                    origin,
+                    pronoun,
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for MoveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MoveError::StochasticPhase => write!(f, "no deterministic move is available"),
+            MoveError::IllegalTransition => write!(f, "state transition is not legal"),
+            MoveError::AmbiguousTransition => write!(f, "multiple moves lead to the same state"),
+        }
+    }
 }
