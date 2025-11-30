@@ -131,6 +131,8 @@ fn determine_destination(
     let player_before = &before.players[player_index];
     let player_after = &after.players[player_index];
     let scoring = after.is_empty();
+    let discard_diff =
+        player_after.discard[tile] as isize - player_before.discard[tile] as isize;
     let legal_rows = collect_legal_rows(player_before, tile);
     let mut target_row = detect_target_row(player_before, player_after, tile, scoring)?;
     if target_row.is_none() && legal_rows.len() == 1 {
@@ -166,8 +168,6 @@ fn determine_destination(
             }
         }
         if !scoring {
-            let discard_diff =
-                player_after.discard[tile] as isize - player_before.discard[tile] as isize;
             if discard_diff != discarded as isize {
                 return Err(MoveError::IllegalTransition);
             }
@@ -175,11 +175,12 @@ fn determine_destination(
         return Ok((MoveDestination::Row(row_index), placed, discarded));
     }
     if !legal_rows.is_empty() {
+        if !scoring && discard_diff == count as isize {
+            return Ok((MoveDestination::Discard, 0, count));
+        }
         return Err(MoveError::AmbiguousTransition);
     }
     if !scoring {
-        let discard_diff =
-            player_after.discard[tile] as isize - player_before.discard[tile] as isize;
         if discard_diff != count as isize {
             return Err(MoveError::IllegalTransition);
         }
