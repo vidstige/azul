@@ -50,17 +50,18 @@ pub fn minmax<S: DeterministicGameState, E: Evaluation<S>, R: Rng>(
 ) -> (Option<usize>, i32) {
     match &state {
         GameState::Deterministic(deterministic_state) => {
-            if depth == 0 {
-                let e = evaluation.evaulate(&state, deterministic_state.current_player());
-                evaluation.update(&state, e);
-                return (None, e);
-            }
             if let Some(winner) = deterministic_state.winner() {
                 return if winner == player {
                     (None, i32::MAX)
                 } else {
                     (None, i32::MIN)
                 };
+            }
+
+            if depth == 0 {
+                let e = evaluation.evaulate(&state, deterministic_state.current_player());
+                evaluation.update(&state, e);
+                return (None, e);
             }
 
             if deterministic_state.current_player() == player {
