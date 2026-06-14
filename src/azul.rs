@@ -1,7 +1,6 @@
-use crate::minmax::{Evaluation, GameState};
+use crate::mcts::GameState;
 use rand::{distributions::WeightedIndex, prelude::Distribution, Rng};
 use std::{
-    collections::HashMap,
     hash::Hash,
     iter, mem,
     ops::{Index, IndexMut},
@@ -487,6 +486,9 @@ impl GameState for State {
     fn current_player(&self) -> usize {
         self.moves % self.players.len()
     }
+    fn num_players(&self) -> usize {
+        self.players.len()
+    }
     fn children<R: Rng>(&self, rng: &mut R) -> Vec<Self> {
         let mut children = Vec::new();
         // take the tiles from one of the factories...
@@ -521,39 +523,14 @@ impl GameState for State {
     }
     fn winner(&self) -> Option<usize> {
         if self.is_game_over() {
-            self.players.iter().map(|player| player.points).max()
+            self.players
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, p)| p.points)
+                .map(|(i, _)| i)
         } else {
             None
         }
     }
 }
 
-impl Evaluation<State> for State {
-    fn evaulate(&self, state: &State, player: usize) -> i32 {
-        state.players[player].points as i32
-    }
-}
-
-// Could not come up with a good name for a basic stupid evaluation
-pub struct Fish {
-    cache: HashMap<State, i32>,
-}
-impl Fish {
-    pub fn new() -> Self {
-        Fish {
-            cache: HashMap::new(),
-        }
-    }
-}
-impl Evaluation<State> for Fish {
-    fn evaulate(&self, state: &State, player: usize) -> i32 {
-        state.players[player].points as i32
-    }
-    fn update(&mut self, state: &State, value: i32) {
-        self.cache.insert(state.clone(), value);
-    }
-    fn heuristic(&self, _states: &mut Vec<State>) {
-        //states.sort_by_key(|state| self.cache.get(state));
-        //states.reverse();
-    }
-}
