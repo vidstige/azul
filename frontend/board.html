@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Azul - Player Board</title>
+<style>
+  :root {
+    --tile-size: 52px;
+    --gap: 4px;
+  }
+
+  body {
+    background: #2c1810;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+
+  .board {
+    background: #f0e6d0;
+    border: 3px solid #8b6a3a;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.6);
+  }
+
+  .board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #8b6a3a;
+  }
+
+  .player-name {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #3a1c08;
+    letter-spacing: 0.05em;
+  }
+
+  .score-box {
+    background: #3a1c08;
+    color: #f0e6d0;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 1.1em;
+    font-weight: bold;
+  }
+
+  .board-main {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .section-label {
+    font-size: 0.72em;
+    color: #7a5630;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+  }
+
+  /* Pattern lines - pyramid shape, right-aligned */
+  .pattern-lines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .pattern-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--gap);
+  }
+
+  /* Divider arrow */
+  .divider {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    color: #8b6a3a;
+    font-size: 1.4em;
+    padding-top: 18px;
+  }
+
+  /* Wall */
+  .wall {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .wall-row {
+    display: flex;
+    gap: var(--gap);
+  }
+
+  /* Floor */
+  .floor-section {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 2px solid #8b6a3a;
+  }
+
+  .floor-row {
+    display: flex;
+    gap: var(--gap);
+    align-items: flex-start;
+  }
+
+  .floor-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .penalty-label {
+    font-size: 0.65em;
+    color: #8b0000;
+    font-weight: bold;
+    margin-top: 2px;
+    text-align: center;
+    width: var(--tile-size);
+  }
+
+  .tile {
+    width: var(--tile-size);
+    height: var(--tile-size);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 5px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .tile-azul   { background-image: url('tiles/0.png'); }
+  .tile-white  { background-image: url('tiles/1.png'); }
+  .tile-red    { background-image: url('tiles/2.png'); }
+  .tile-black  { background-image: url('tiles/3.png'); }
+  .tile-yellow { background-image: url('tiles/4.png'); }
+
+  .tile-empty {
+    background: #ddd0b8;
+    border: 1.5px dashed #b09070;
+    background-image: none;
+  }
+
+  .tile-ghost {
+    opacity: 0.18;
+  }
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="board-header">
+    <span class="player-name">Player 1</span>
+    <span class="score-box">Score: 7</span>
+  </div>
+  <div class="board-main">
+    <div>
+      <div class="section-label">Pattern Lines</div>
+      <div class="pattern-lines" id="patternLines"></div>
+    </div>
+    <div class="divider">→</div>
+    <div>
+      <div class="section-label">Wall</div>
+      <div class="wall" id="wall"></div>
+    </div>
+  </div>
+  <div class="floor-section">
+    <div class="section-label">Floor</div>
+    <div class="floor-row" id="floor"></div>
+  </div>
+</div>
+
+<script>
+// Maps game color name → CSS class
+const SPRITE = {
+  AZUL:   'tile-azul',
+  WHITE:  'tile-white',
+  RED:    'tile-red',
+  BLACK:  'tile-black',
+  YELLOW: 'tile-yellow',
+};
+
+// Wall layout - matches Rust WALL constant
+const WALL_LAYOUT = [
+  ['AZUL',   'YELLOW', 'RED',    'BLACK',  'WHITE' ],
+  ['WHITE',  'AZUL',   'YELLOW', 'RED',    'BLACK' ],
+  ['BLACK',  'WHITE',  'AZUL',   'YELLOW', 'RED'   ],
+  ['RED',    'BLACK',  'WHITE',  'AZUL',   'YELLOW'],
+  ['YELLOW', 'RED',    'BLACK',  'WHITE',  'AZUL'  ],
+];
+
+// Hardcoded game state
+const state = {
+  score: 7,
+  // patternLines[i]: tile filling row i (size = i+1), tiles fill right-to-left
+  patternLines: [
+    { tile: 'AZUL',   count: 1 },  // row 0: 1 slot,  full
+    { tile: 'RED',    count: 1 },  // row 1: 2 slots, 1 placed
+    { tile: 'WHITE',  count: 2 },  // row 2: 3 slots, 2 placed
+    { tile: null,     count: 0 },  // row 3: 4 slots, empty
+    { tile: 'YELLOW', count: 3 },  // row 4: 5 slots, 3 placed
+  ],
+  // wall[row][col]: true = tile placed
+  wall: [
+    [true,  false, false, true,  false],
+    [false, true,  false, false, false],
+    [false, false, true,  false, false],
+    [false, false, false, true,  false],
+    [false, false, false, false, true ],
+  ],
+  floor: ['RED', 'AZUL'],
+};
+
+function makeTile(color, ghost = false) {
+  const el = document.createElement('div');
+  el.className = 'tile ' + (color ? SPRITE[color] : 'tile-empty');
+  if (ghost) el.classList.add('tile-ghost');
+  return el;
+}
+
+// Render pattern lines
+const patternLinesEl = document.getElementById('patternLines');
+state.patternLines.forEach(({ tile, count }, rowIndex) => {
+  const size = rowIndex + 1;
+  const rowEl = document.createElement('div');
+  rowEl.className = 'pattern-row';
+  for (let j = 0; j < size; j++) {
+    // slots render left-to-right; tiles fill from the right
+    const posFromRight = size - 1 - j;
+    const filled = posFromRight < count;
+    rowEl.appendChild(makeTile(filled ? tile : null));
+  }
+  patternLinesEl.appendChild(rowEl);
+});
+
+// Render wall (ghost tiles show where each color goes)
+const wallEl = document.getElementById('wall');
+WALL_LAYOUT.forEach((wallRow, r) => {
+  const rowEl = document.createElement('div');
+  rowEl.className = 'wall-row';
+  wallRow.forEach((color, c) => {
+    rowEl.appendChild(makeTile(color, !state.wall[r][c]));
+  });
+  wallEl.appendChild(rowEl);
+});
+
+// Render floor
+const FLOOR_PENALTIES = [-1, -1, -2, -2, -2, -3, -3];
+const floorEl = document.getElementById('floor');
+FLOOR_PENALTIES.forEach((penalty, i) => {
+  const slotEl = document.createElement('div');
+  slotEl.className = 'floor-slot';
+  slotEl.appendChild(makeTile(state.floor[i] || null));
+  const label = document.createElement('div');
+  label.className = 'penalty-label';
+  label.textContent = penalty;
+  slotEl.appendChild(label);
+  floorEl.appendChild(slotEl);
+});
+</script>
+</body>
+</html>
